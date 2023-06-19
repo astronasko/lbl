@@ -238,6 +238,9 @@ def spline_template(inst: InstrumentsType, template_file: str,
     template_table = inst.load_template(template_file)
     # get properties from template table
     twave = np.array(template_table['wavelength'])
+    rms = np.array(template_table['rms'])
+    large_rms = rms>10*np.nanmedian(rms)
+
     tflux = np.array(template_table['flux'])
 
     # some masking to avoid errors later
@@ -254,6 +257,8 @@ def spline_template(inst: InstrumentsType, template_file: str,
     # flag completely spurious data in the template. Negative values
     # and values > 10x the median are rejected
     bad = (tflux < 0) | (tflux / np.nanmedian(tflux) > 10)
+    # we remove points where RMS is ≥10x median RMS
+    bad = bad | large_rms
     tflux[bad] = np.nan
     # -------------------------------------------------------------------------
     # Deal with Rotational broadening
@@ -2678,6 +2683,18 @@ def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
     # get the wave and flux vectors for the tempalte
     t_wave = np.array(template_table['wavelength'])
     t_flux = np.array(template_table['flux'])
+
+    rms = np.array(template_table['rms'])
+    large_rms = rms>10*np.nanmedian(rms)
+    # remove large noise outliers at ≥10x the median RMS
+    t_flux = np.array(template_table['flux'])
+    t_flux[large_rms] = np.nan
+    # removeing points present <50% of the time
+    low_n = template_table['n_valid']<0.5*np.max(template_table['n_valid'])
+    t_flux[low_n] = np.nan
+    # removing negative flux values
+    t_flux[t_flux<0] = np.nan
+
     with warnings.catch_warnings(record=True) as _:
         t_snr = t_flux / template_table['rms']
         # remove infinite values
