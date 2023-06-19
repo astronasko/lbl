@@ -835,6 +835,10 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     berv = inst.get_berv(sci_hdr)
     inst.params['BERV'] = berv
 
+    # TODO --> get the systemic velocity of the object relative to the friend's
+    #  (or itself) mask. Also retrieve FWHM. This will be the starting point
+    # for LBL iterations.
+
     width = np.zeros(sci_data.shape[0], dtype=int)
     for order_num in range(sci_data.shape[0]):  # TODO change back to hp_width
         # within each order, we determine the median width of lines and
@@ -858,6 +862,8 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     # -------------------------------------------------------------------------
     # deal with first estimate of RV / CCF equivalent width
     if reset_rv:
+        # TODO -- to be removed as we will have a better estimate from the
+        # friend's mask
         # if we are not using calibration file
         if inst.params['DATA_TYPE'] == 'SCIENCE':
             # calculate the rough CCF RV estimate
@@ -880,6 +886,7 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
             sys_rv, ccf_ewidth = 0, 0
     # for FP files
     else:
+        # TODO -- also get rid of this bit
         # use the systemic velocity from closest date
         closest = np.argmin(mjdate - mjdate_all)
         # get the closest system rv to this observation
@@ -892,6 +899,10 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
         msg = '\tSystemic rv + berv={0:.4f} m/s from MJD={1}'
         margs = [-sys_rv, mjdate_all[closest]]
         log.general(msg.format(*margs))
+
+    # TODO add the berv to the systemic velocity
+    # sys_rv = systemic_velocity_from_CCF + berv
+
     # -------------------------------------------------------------------------
     # iteration loop
     # -------------------------------------------------------------------------
