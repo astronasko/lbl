@@ -15,8 +15,10 @@ from astropy.time import Time
 
 from lbl.core import base
 from lbl.core import base_classes
-from lbl.instruments import select
+from lbl.core import parameters
 from lbl.core import wrap_setup
+from lbl.core import io
+from lbl.instruments import select
 
 # =============================================================================
 # Define variables
@@ -31,7 +33,7 @@ InstrumentsList = select.InstrumentsList
 InstrumentsType = select.InstrumentsType
 ParamDict = base_classes.ParamDict
 LblException = base_classes.LblException
-log = base_classes.log
+log = io.log
 # description for setup recipe
 DESCRIPTION_COMPIL = 'Use this code to setup LBL wrapper script'
 # sub-directories to create
@@ -106,10 +108,17 @@ def main(**kwargs):
         if not cond1 and cond2:
             # noinspection PyBroadException
             try:
-                wmsg = 'Data directory {0} does not exist, creating'
-                log.warning(wmsg.format(params['data_dir']))
-                # make the directory
-                os.makedirs(params['data_dir'])
+                question = ('Data directory {0} does not exist, '
+                            'create it? [Y]es/[N]o:\t')
+                uinput = input(question.format(params['data_dir']))
+                if 'Y' in uinput.upper():
+                    # print that we are creating directory
+                    msg = 'Creating data directory: {0}'
+                    log.general(msg.format(params['data_dir']))
+                    # make the directory
+                    os.makedirs(params['data_dir'])
+                    # break from while loop
+                    break
             except Exception as e:
                 emsg = 'Data directory {0} does not exist and cannot be created'
                 log.error(emsg.format(params['data_dir']))
@@ -160,9 +169,20 @@ def main(**kwargs):
         # check if directory exists
         if not os.path.exists(dirpath):
             # print progress
-            log.general('\nCreating {0} sub-directory: {1}'.format(dirtype, dirpath))
+            msg = 'Creating {0} sub-directory: {1}'
+            margs = [dirtype, dirpath]
+            log.general(msg.format(*margs))
             # make the directory
             os.makedirs(dirpath)
+
+    # -------------------------------------------------------------------------
+    # get the instrument instance
+    # -------------------------------------------------------------------------
+    # get instrument class
+    instrument = select.InstDict[params['instrument']][params['data_source']]
+    # construct the instrumnet instance
+    inst = instrument(parameters.params.copy())
+
     # -------------------------------------------------------------------------
     # Save the wrap file
     # -------------------------------------------------------------------------
@@ -187,6 +207,8 @@ def main(**kwargs):
     wrap_dict['DATA_DIR'] = params['data_dir']
     # set the INPUT_FILE - defaults to all files in science/object directory
     wrap_dict['INPUT_FILE'] = '*'
+    # The input science data are blaze corrected
+    wrap_dict['BLAZE_CORRECTED'] = inst.params['BLAZE_CORRECTED']
     # Override the blaze filename
     wrap_dict['BLAZE_FILE'] = 'blaze.fits'
     # -------------------------------------------------------------------------
@@ -203,6 +225,8 @@ def main(**kwargs):
     # -------------------------------------------------------------------------
     # default run conditions
     # -------------------------------------------------------------------------
+    # We don't reset by default (we don't want to remove uses data)
+    wrap_dict['RUN_LBL_RESET'] = False
     # No tellu clean for spirou/nirps in apero/cadc
     wrap_dict['RUN_LBL_TELLUCLEAN'] = False
     if params['instrument'] in ['SPIROU', 'NIRPS_HE', 'NIRPS_HA']:
@@ -220,16 +244,26 @@ def main(**kwargs):
     # -------------------------------------------------------------------------
     # other settings
     # -------------------------------------------------------------------------
+    # default resproj tables
+    resproj_tables = dict()
+    resproj_tables['DTEMP3500'] = 'temperature_gradient_3500.fits'
     # set resproj tables
-    wrap_dict['RESPROJ_TABLES'] = '[{0}]'.format(','.join(['']))
+    wrap_dict['RESPROJ_TABLES'] = resproj_tables
     # set rotational broadening
     wrap_dict['ROTBROAD'] = '[{0}]'.format(','.join(['']))
     # set plotting
     wrap_dict['DO_PLOT'] = False
     # -------------------------------------------------------------------------
+    # if instrument is Generic we have push keywords into the wrap file
+    if params['instrument'] == 'Generic':
+        wrap_dict = wrap_setup.generic_instrument(wrap_dict)
+    # -------------------------------------------------------------------------
     # print progress
     log.info('Saving wrap file: {0}. '.format(params['wrap_file']))
-    log.general('\t\tPlease edit the science criteria and run/skip info manually')
+    log.info('\t\tPlease edit the science criteria and run/skip info manually')
+    log.info('\t\t\te.g. {OBJECT_NAME} and {TEMPLATE_NAME}')
+    log.info('\t\t\tPlease get to know all options in this wrap file before '
+             'running!')
 
     # push into file
     wrap_default = wrap_setup.create_wrap_file(params, wrap_dict)
@@ -262,12 +296,23 @@ def main(**kwargs):
     return locals()
 
 
+def run():
+    """
+    Main function for running the setup from the command line
+    (avoids returning locals)
+
+    :return:
+    """
+    # run the main function
+    _ = main()
+
+
 # =============================================================================
 # Start of code
 # =============================================================================
 if __name__ == "__main__":
     # print hello world
-    ll = main()
+    _ = main()
 
 # =============================================================================
 # End of code

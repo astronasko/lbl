@@ -27,7 +27,7 @@ __version__ = base.__version__
 __date__ = base.__date__
 __authors__ = base.__authors__
 # get classes
-log = base_classes.log
+log = io.log
 
 
 # =============================================================================
@@ -86,7 +86,8 @@ def move_log(data_dir: str, recipe: str):
     base_classes.log = log
 
 
-def splash(name: str, instrument: str, params: base_classes.ParamDict,
+def splash(name: str, instrument: str,
+           params: Union[base_classes.ParamDict, None] = None,
            plogger: Union[logger.Log, None] = None):
     # deal with no logger
     if plogger is None:
@@ -192,21 +193,71 @@ def quick_args(args: Any, quickargs: Dict[str, QuickArg]):
     return listargs
 
 
-def check_runparams(rparams: Dict[str, Any], key: str) -> Any:
+def check_runparams(rparams: Dict[str, Any], key: str,
+                    required: bool = True) -> Any:
     """
     Check key run parameters
 
     :param key: str, the key in rparams
     :param rparams: dict, the rparams dictionary
+    :param required: bool, if True raise exception if key not found
 
     :return: the value
     """
+    if key in rparams and not required:
+        if rparams[key] is None:
+            return None
+        if isinstance(rparams[key], list):
+            return rparams[key]
+        else:
+            return rparams[key]
+    elif not required:
+        return None
+
     if key not in rparams:
         emsg = 'LBL_WRAP ERROR: Must define key {0} in rparams'
         eargs = [key]
         raise base_classes.LblException(emsg.format(*eargs))
     else:
         return rparams[key]
+
+
+def wraplistcheck(parameter: Any, name: str, iteration: int,
+                  length: int) -> Any:
+    """
+    Wrap around a list check (if parameter is a list)
+    get this iterations values (and check if they are a list of matching
+    length to object_sciences) or just a single value
+
+    :param parameter: Any, a parameter that could be a list or Any other value
+    :param name: str, the name of the parameter
+    :param iteration: int, the iteration number of the list
+    :param length: int, the length of the list
+
+    :return: Any, the parameter value in the list or the parameter itself
+    """
+    # deal with cases where parameter is a list and is not the right length
+    if isinstance(parameter, list) and len(parameter) != length:
+        # if we have a list of the wrong length return None
+        emsg = ('LBL_WRAP ERROR: If list provided for {0} must be length={1} '
+                '(got length={2})')
+        eargs = [name, length, len(parameter)]
+        raise base_classes.LblException(emsg.format(*eargs))
+    # if we have a list of the right length return the iteration value
+    if isinstance(parameter, list):
+        # log that we are using
+        msg = '\tUsing {0}[{1}]={2}'
+        margs = [name, iteration, parameter[iteration]]
+        log.info(msg.format(*margs))
+        # return this parameter
+        return parameter[iteration]
+    else:
+        # log that we are using
+        msg = '\tUsing {0}={1}'
+        margs = [name, parameter]
+        log.info(msg.format(*margs))
+        # log that we are using
+        return parameter
 
 
 # =============================================================================

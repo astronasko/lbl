@@ -8,26 +8,40 @@ Created on 2021-03-15
 @author: cook
 """
 import os
+from pathlib import Path
 
 from astropy.time import Time, TimeDelta
 
 # =============================================================================
 # Define variables
 # =============================================================================
+__package_name__: str = 'lbl'
+__PATH__ = Path(__file__).parent.parent
+with open(__PATH__.joinpath('version.txt'), 'r') as vfile:
+    vtext = vfile.readlines()
 __NAME__: str = 'base.py'
-__version__: str = '0.63.009'
-__date__: str = '2024-07-08'
+__version__ = vtext[0].strip()
+__date__ = vtext[1].strip()
 __authors__: str = ('Neil Cook, Etienne Artigau, Charles Cadieux, '
                     'Thomas Vandal, Ryan Cloutier, Pierre Larue')
 __package__: str = 'lbl'
 
 # currently supported instruments
 INSTRUMENTS = ['SPIROU', 'HARPS', 'ESPRESSO', 'CARMENES', 'NIRPS_HA',
-               'NIRPS_HE', 'HARPSN', 'MAROONX', 'SOPHIE']
+               'NIRPS_HE', 'HARPSN', 'MAROONX', 'SOPHIE', 'CORALIE']
+
+# add generic instrument last
+INSTRUMENTS += ['Generic']
 
 # log variables
-LOG_FILE = os.path.join(os.path.expanduser('~'), 'lbl.log')
+TIME_NOW = str(Time.now().unix).replace('.', '_')
+LOG_FILE = os.path.join(os.path.expanduser('~'), 'lbl',
+                        'lbl_{0}.log'.format(TIME_NOW))
 LOG_FORMAT = '%(asctime)s %(message)s'
+# make sure log path exists
+if not os.path.exists(os.path.dirname(LOG_FILE)):
+    os.makedirs(os.path.dirname(LOG_FILE))
+
 # astropy time is slow the first time - get it done now and do not re-import
 __now__ = Time.now()
 AstropyTime = Time

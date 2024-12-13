@@ -30,7 +30,7 @@ InstrumentsList = select.InstrumentsList
 InstrumentsType = select.InstrumentsType
 ParamDict = base_classes.ParamDict
 LblException = base_classes.LblException
-log = base_classes.log
+log = io.log
 # add arguments (must be in parameters.py)
 ARGS_MASK = [  # core
     'INSTRUMENT', 'CONFIG_FILE',
@@ -117,13 +117,21 @@ def __main__(inst: InstrumentsType, **kwargs):
     # clean calib directory
     io.clean_directory(dparams['CALIB_DIR'],
                        include_files=inst.params['SAMPLE_WAVE_GRID_FILE'])
-    # clean log directory
-    logpath = os.path.dirname(base_classes.log.filepath)
-    io.clean_directory(logpath)
     # -------------------------------------------------------------------------
     # return local namespace
     # -------------------------------------------------------------------------
     return locals()
+
+
+def run():
+    """
+    Main function for running the setup from the command line
+    (avoids returning locals)
+
+    :return:
+    """
+    # run the main function
+    _ = main()
 
 
 # =============================================================================

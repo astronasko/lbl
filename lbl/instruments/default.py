@@ -34,7 +34,7 @@ Time = base.AstropyTime
 # load classes
 ParamDict = base_classes.ParamDict
 LblException = base_classes.LblException
-log = base_classes.log
+log = io.log
 
 
 # =============================================================================
@@ -92,6 +92,21 @@ class Instrument:
         """
         emsg = 'Must implement {0} in specific instrument class'
         raise NotImplemented(emsg.format(method))
+
+    def param_set(self, key: str, value: Any, source: str = None) -> None:
+        """
+        Set a parameter in the parameter dictionary
+
+        :param key: str, the key to set
+        :param value: any, the value to set
+        :param source: str, the source of the parameter
+        :return: None
+        """
+        # do not update parameters that the user has set themselves
+        if 'KWARGS' in self.params.sources():
+            return
+        # set the parameter
+        self.params.set(key, value, source=source)
 
     # -------------------------------------------------------------------------
     # Common instrument methods (should be overridden if instrument requires)
@@ -190,7 +205,7 @@ class Instrument:
         # get absolute path
         abspath = os.path.join(directory, basename)
         # check that this file exists
-        if not io.check_file_exists(abspath, required=False):
+        if not io.check_file_exists(abspath, 'ref_table', required=False):
             # ref_table does not exist --> return None
             return abspath, False
         else:
@@ -225,7 +240,7 @@ class Instrument:
         # construct absolute path
         abspath = os.path.join(directory, basename)
         # check that this file exists
-        if not io.check_file_exists(abspath, required=False):
+        if not io.check_file_exists(abspath, 'lblrv', required=False):
             # ref_table does not exist --> return None
             return abspath, False
         else:
@@ -274,9 +289,13 @@ class Instrument:
         header = self.set_hkey(header, 'KW_PDATE', value=Time.now().fits)
         # add which lbl instrument was used
         header = self.set_hkey(header, 'KW_INSTRUMENT', value=self.name)
+        # add the mask
+        header = self.set_hkey(header, 'KW_LBLMASK', value=outputs['MASK_FILE'])
         # add the template velocity from CCF
         header = self.set_hkey(header, 'KW_MODELVEL',
                                value=outputs['MODEL_VELOCITY'])
+        # add the raw hash from the science file
+        header = self.set_hkey(header, 'KW_RAW_HASH', value=outputs['RAW_HASH'])
         # ---------------------------------------------------------------------
         # Convert ref table dictionary to table
         # ---------------------------------------------------------------------
@@ -417,7 +436,7 @@ class Instrument:
             objname = self.params['OBJECT_SCIENCE']
         # deal with no object
         if self.params['OBJECT_TEMPLATE'] is None:
-            self.params.set('OBJECT_TEMPLATE', value=objname, source=func_name)
+            self.param_set('OBJECT_TEMPLATE', value=objname, source=func_name)
 
     def write_rdb_fits(self, filename: str, rdb_data: Dict[str, Any]):
         """

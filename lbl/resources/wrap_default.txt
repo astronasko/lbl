@@ -38,6 +38,8 @@ if __name__ == "__main__":
     # The input file string (including wildcards) - if not set will use all
     #   files in the science directory (for this object name)
     # rparams['INPUT_FILE'] = '{INPUT_FILE}'
+    # The input science data are blaze corrected
+    rparams['BLAZE_CORRECTED'] = {BLAZE_CORRECTED}
     # Override the blaze filename
     #      (if not set will use the default for instrument)
     # rparams['BLAZE_FILE'] = '{BLAZE_FILE}'
@@ -58,6 +60,8 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # what to run and skip if already on disk
     # -------------------------------------------------------------------------
+    # Whether to reset all files before processing
+    rparams['RUN_LBL_RESET'] = {RUN_LBL_RESET}
     # Whether to run the telluric cleaning process (NOT recommended for data
     #   that has better telluric cleaning i.e. SPIROU using APERO)
     rparams['RUN_LBL_TELLUCLEAN'] = {RUN_LBL_TELLUCLEAN}
@@ -101,6 +105,11 @@ if __name__ == "__main__":
 
     # turn on plots
     rparams['PLOT'] = {DO_PLOT}
+
+    # -------------------------------------------------------------------------
+    # Other settings
+    # -------------------------------------------------------------------------
+    {OTHER_SETTINGS}
 
     # -------------------------------------------------------------------------
     # Run the wrapper code using the above settings

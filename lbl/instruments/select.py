@@ -22,6 +22,7 @@ from lbl.core import base_classes
 from lbl.core import io
 from lbl.core import logger
 from lbl.core import parameters
+from lbl.instruments import generic
 from lbl.instruments import carmenes
 from lbl.instruments import default
 from lbl.instruments import espresso
@@ -31,6 +32,7 @@ from lbl.instruments import sophie
 from lbl.instruments import nirps
 from lbl.instruments import spirou
 from lbl.instruments import maroonx
+from lbl.instruments import coralie
 from lbl.resources import lbl_misc
 
 # =============================================================================
@@ -42,7 +44,7 @@ __date__ = base.__date__
 __authors__ = base.__authors__
 # load classes
 ParamDict = base_classes.ParamDict
-log = base_classes.log
+log = io.log
 LblException = base_classes.LblException
 # instruments list
 InstrumentsType = Union[default.Instrument,
@@ -54,7 +56,9 @@ InstrumentsType = Union[default.Instrument,
                         nirps.NIRPS_HE, nirps.NIRPS_HE_CADC, nirps.NIRPS_HE_ESO,
                         harpsn.HarpsN_ORIG, harpsn.HarpsN_ESO,
                         maroonx.MaroonX,
-                        sophie.Sophie]
+                        sophie.Sophie,
+                        coralie.Coralie,
+                        generic.Generic]
 InstrumentsList = (default.Instrument,
                    spirou.Spirou, spirou.SpirouCADC,
                    harps.Harps_ORIG, harps.Harps_ESO,
@@ -64,7 +68,9 @@ InstrumentsList = (default.Instrument,
                    nirps.NIRPS_HE, nirps.NIRPS_HE_CADC, nirps.NIRPS_HE_ESO,
                    harpsn.HarpsN_ORIG, harpsn.HarpsN_ESO,
                    maroonx.MaroonXRed, maroonx.MaroonXBlue,
-                   sophie.Sophie)
+                   sophie.Sophie,
+                   coralie.Coralie,
+                   generic.Generic)
 
 # Add all the instrument + source combinations and link them to instrument
 #   classes
@@ -96,6 +102,10 @@ InstDict['MAROONX']['RED'] = maroonx.MaroonXRed
 InstDict['MAROONX']['BLUE'] = maroonx.MaroonXBlue
 InstDict['SOPHIE'] = dict()
 InstDict['SOPHIE']['None'] = sophie.Sophie
+InstDict['CORALIE'] = dict()
+InstDict['CORALIE']['None'] = coralie.Coralie
+InstDict['Generic'] = dict()
+InstDict['Generic']['None'] = generic.Generic
 
 
 # =============================================================================
@@ -194,7 +204,7 @@ def parse_args(argnames: List[str], kwargs: Dict[str, Any],
             if not isinstance(config_file, (str, Path)):
                 raise LblException('config file not a valid path or string')
             # check if exists
-            if not io.check_file_exists(config_file):
+            if not io.check_file_exists(config_file, 'config'):
                 emsg = 'config file = "{0}" does not exist'
                 eargs = [os.path.realpath(config_file)]
                 raise base_classes.LblException(emsg.format(*eargs))
@@ -220,6 +230,9 @@ def parse_args(argnames: List[str], kwargs: Dict[str, Any],
     for kwarg in kwargs:
         # force kwarg to upper case
         kwargname = kwarg.upper()
+        # skip None keys
+        if kwargs[kwarg] is None:
+            continue
         # make sure these are in default_values
         if kwargname not in list(default_values.keys()):
             emsg = 'Python Argument "{0}" is invalid'
@@ -296,11 +309,11 @@ def load_instrument(args: ParamDict,
         source_dict = InstDict[instrument]
         # None should only be in there if there are no data sources
         if 'None' in source_dict.keys():
-            inst = source_dict['None'](params)
+            inst_class = source_dict['None']
         # use the data source to get instance
         elif data_source in source_dict:
             # get the instance from the source dictionary
-            inst = source_dict[data_source](params)
+            inst_class = source_dict[data_source]
         else:
             emsg = 'Data source "{0}" invalid'
             eargs = [data_source]
@@ -310,6 +323,9 @@ def load_instrument(args: ParamDict,
         emsg = 'Instrument name "{0}" invalid'
         eargs = [instrument]
         raise base_classes.LblException(emsg.format(*eargs))
+    # -------------------------------------------------------------------------
+    # construct instrument instance
+    inst = inst_class(params)
     # override inst params with args (from input/cmd/yaml)
     for argname in args:
         if argname in inst.params:

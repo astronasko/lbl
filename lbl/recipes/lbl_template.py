@@ -36,16 +36,16 @@ InstrumentsList = select.InstrumentsList
 InstrumentsType = select.InstrumentsType
 ParamDict = base_classes.ParamDict
 LblException = base_classes.LblException
-log = base_classes.log
+log = io.log
 # add arguments (must be in parameters.py)
 ARGS_TEMPLATE = [  # core
     'INSTRUMENT', 'CONFIG_FILE', 'DATA_SOURCE', 'DATA_TYPE',
     # directory
     'DATA_DIR', 'TEMPLATE_SUBDIR', 'SCIENCE_SUBDIR',
     # science
-    'OBJECT_SCIENCE', 'OBJECT_TEMPLATE'
+    'OBJECT_SCIENCE', 'OBJECT_TEMPLATE', 'BLAZE_FILE', 'BLAZE_CORRECTED',
     # other
-                      'VERBOSE', 'PROGRAM',
+    'VERBOSE', 'PROGRAM',
 ]
 
 DESCRIPTION_TEMPLATE = 'Use this code to create the LBL template'
@@ -472,6 +472,28 @@ def __main__(inst: InstrumentsType, **kwargs):
         rms_odd = (p84_odd - p16_odd) / 2
         rms_even = (p84_even - p16_even) / 2
 
+    # -------------------------------------------------------------------------
+    # TODO: Andd local SNR part from EA
+    # Local SNR
+    snr_odd = p50_odd / rms_odd
+    snr_even = p50_even / rms_even
+    # Perform a low pass filter on the SNR
+    snr_odd = mp.lowpassfilter(snr_odd, hp_width)
+    snr_even = mp.lowpassfilter(snr_even, hp_width)
+    # We reject domains that are below and SNR = 10
+    # TODO -> makes this a global parameter
+    # The minimal SNR required for a pixel considered to be valid
+    # We determine the SNR from the -1 to +1 sigma equivalent distribution
+    # of the input spectra
+    snr_threshold = inst.params['TEMPLATE_SNR_THRES']
+    low_snr_odd = snr_odd < snr_threshold
+    p50_odd[low_snr_odd] = np.nan
+    rms_odd[low_snr_odd] = np.nan
+    low_snr_odd = snr_even < snr_threshold
+    p50_even[low_snr_odd] = np.nan
+    rms_odd[low_snr_odd] = np.nan
+    # -------------------------------------------------------------------------
+    # other parameters for the header
     nfiles = len(science_files)
     # TODO -- use the same as in APERO with the smart weight in BERV
     template_coverage = len(np.unique(berv // 1000))  # in km/s

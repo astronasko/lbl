@@ -17,7 +17,6 @@ import wget
 from astropy import constants
 from astropy import units as uu
 from astropy.table import Table
-from astropy.io import fits
 from scipy import stats
 from scipy.stats import pearsonr
 
@@ -45,7 +44,7 @@ Instrument = default.Instrument
 ParamDict = base_classes.ParamDict
 LblException = base_classes.LblException
 LblLowCCFSNR = base_classes.LblLowCCFSNR
-log = base_classes.log
+log = io.log
 InstrumentsType = select.InstrumentsType
 # get speed of light
 speed_of_light_ms = constants.c.value
@@ -413,8 +412,6 @@ def spline_template(inst: InstrumentsType, template_file: str,
     glw_c = grad_log_wave * speed_of_light_ms
     # get the derivative of the flux
     dflux = np.gradient(tflux) / glw_c
-    # fractional change in flux for an offset in velocity
-    dflux /= tflux0
     # get the 2nd derivative of the flux
     d2flux = np.gradient(dflux) / glw_c
     # get the 3rd derivative of the flux
@@ -550,9 +547,9 @@ def get_systemic_vel_props(inst: InstrumentsType, template_file: str,
     props = dict()
     # check if there is an extension with the RV for all epochs
     # noinspection PyBroadException
-    try:
-        props['SCI_TABLE'] = Table(fits.getdata(template_file, 'SCI_TABLE'))
-    except:
+    props['SCI_TABLE'] = io.load_table(template_file, extname='SCI_TABLE',
+                                       required=False)
+    if props['SCI_TABLE'] is None:
         msg = 'No RV table found'
         log.general(msg)
 
@@ -1390,23 +1387,23 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
                 valid = np.isfinite(model0[order_num])
                 valid &= np.isfinite(sci_data[order_num])
 
-                # get the median for the model and original spectrum
-                med_model0 = mp.nanmedian(model0[order_num][valid])
-                med_sci_data_0 = mp.nanmedian(sci_data0[order_num][valid])
                 # normalize by the median
                 with warnings.catch_warnings(record=True):
-                    model0[order_num] = model0[order_num] / med_model0
-                # multiply by the median of the original spectrum
-                with warnings.catch_warnings(record=True):
-                    model0[order_num] = model0[order_num] * med_sci_data_0
+                    # get the sci data nad model for this order and valid points
+                    rpart1 = sci_data0[order_num][valid]
+                    rpart2 = model0[order_num][valid]
+                    # science to model ratio
+                    ratio_sci = mp.nanmedian(rpart1 / rpart2)
+                    model0[order_num] = model0[order_num] * ratio_sci
             # -----------------------------------------------------------------
             # update the other splines
             # track ratio if relevant
-            dmodel[order_num] = dspline[is_even](wave_ord)
+            b_ratio = blaze_ord * ratio[order_num]
+            dmodel[order_num] = dspline[is_even](wave_ord) * b_ratio
             # only do the d2 and d3 stuff if on last iteration
             if flag_last_iter:
-                d2model_ord = d2spline[is_even](wave_ord)
-                d3model_ord = d3spline[is_even](wave_ord)
+                d2model_ord = d2spline[is_even](wave_ord) * b_ratio
+                d3model_ord = d3spline[is_even](wave_ord) * b_ratio
                 d2model[order_num] = d2model_ord
                 d3model[order_num] = d3model_ord
                 # deal with residual projection tables if required
@@ -1414,7 +1411,7 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
                     # loop around residual project tables
                     for key in inst.params['RESPROJ_TABLES']:
                         # calculate spline
-                        rp_spline = splines[key](wave_ord)
+                        rp_spline = splines[key](wave_ord) * b_ratio
                         # The models are always expressed in terms of the
                         # original spectrum
                         # rblaze = np.nanmedian(sci_data0[order_num] / blaze_ord)
@@ -1451,8 +1448,6 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
         # ---------------------------------------------------------------------
         # get orders
         orders = ref_table['ORDER']
-        # keep track of which order we are looking at
-        current_order = None
         # set these for use/update later
         nwavegrid = mp.doppler_shift(wavegrid, -sys_rv)
         # get splines between shifted wave grid and pixel grid
@@ -1500,11 +1495,7 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
             if (iteration != 1) and not (mask_keep[line_it]):
                 continue
             # -----------------------------------------------------------------
-            # if this is a new order the get residuals for this order
-            if order_num != current_order:
-                # update current order
-                current_order = int(order_num)
-            # get this orders values
+            # get this orders values (shallow copy)
             ww_ord = nwavegrid[order_num]
             sci_ord = sci_data[order_num]
             wave2pix = wave2pixlist[order_num]
@@ -1656,7 +1647,7 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
             if np.any(model_seg <= 0):
                 continue
 
-            diff_seg = ((sci_seg / model_seg) - 1) * weight_mask
+            diff_seg = (sci_seg - model_seg) * weight_mask
             # work out the sum of the rms
             sum_rms = np.sum(rms_ord[x_start: x_end + 1] * weight_mask)
 
@@ -1667,8 +1658,6 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
 
             # work out the mean rms
             mean_rms = sum_rms / sum_weight_mask
-            # express as a fractional RMS
-            mean_rms /= np.nanmean(model_seg)
 
             # -----------------------------------------------------------------
             # work out the 1st derivative
@@ -3159,11 +3148,11 @@ def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
     # -------------------------------------------------------------------------
     # store in a table for on going use
     table = Table()
-    table['ll_mask_s'] = ll_mask_s
-    table['ll_mask_e'] = ll_mask_e
-    table['w_mask'] = w_mask
-    table['value'] = f_mask
-    table['depth'] = depth
+    table['ll_mask_s'] = np.array(ll_mask_s)
+    table['ll_mask_e'] = np.array(ll_mask_e)
+    table['w_mask'] = np.array(w_mask)
+    table['value'] = np.array(f_mask)
+    table['depth'] = np.array(depth)
     table['line_snr'] = abs(depth * snr_mask)
     # return the mask table
     return table

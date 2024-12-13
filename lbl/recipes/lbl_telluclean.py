@@ -32,16 +32,16 @@ InstrumentsList = select.InstrumentsList
 InstrumentsType = select.InstrumentsType
 ParamDict = base_classes.ParamDict
 LblException = base_classes.LblException
-log = base_classes.log
+log = io.log
 # add arguments (must be in parameters.py)
 ARGS_TEMPLATE = [  # core
     'INSTRUMENT', 'CONFIG_FILE', 'DATA_SOURCE', 'DATA_TYPE',
     # directory
     'DATA_DIR', 'TEMPLATE_SUBDIR', 'SCIENCE_SUBDIR',
     # science
-    'OBJECT_SCIENCE', 'OBJECT_TEMPLATE'
+    'OBJECT_SCIENCE', 'OBJECT_TEMPLATE', 'BLAZE_FILE', 'BLAZE_CORRECTED',
     # other
-                      'VERBOSE', 'PROGRAM',
+    'VERBOSE', 'PROGRAM',
 ]
 
 DESCRIPTION_TEMPLATE = 'Use this code to create the LBL template'

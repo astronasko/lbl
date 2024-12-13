@@ -10,12 +10,14 @@ Created on 2021-03-15
 @author: cook
 """
 import copy
+import fnmatch
 import itertools
 import os
 import warnings
 from collections import UserDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -25,6 +27,7 @@ from astropy.table import Table
 
 from lbl.core import base
 from lbl.core import base_classes
+from lbl.core import logger
 
 # =============================================================================
 # Define variables
@@ -35,7 +38,7 @@ __date__ = base.__date__
 __authors__ = base.__authors__
 # get classes
 LblException = base_classes.LblException
-log = base_classes.log
+log = logger.Log(filename=base.LOG_FILE)
 # set forbidden header keys (not to be copied)
 FORBIDDEN_KEYS = ['SIMPLE', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2',
                   'EXTEND', 'COMMENT', 'CRVAL1', 'CRPIX1', 'CDELT1',
@@ -205,6 +208,9 @@ class LBLHeader(UserDict):
             # exceptionally long keys we have to ignore
             if len(outkey) > 40:
                 continue
+            # blank keys we have to ignore as well
+            if key.upper() in ['', 'NULL', 'NONE']:
+                continue
             # cannot propagate these keys
             if key in ['COMMENT', 'HISTORY']:
                 continue
@@ -212,6 +218,91 @@ class LBLHeader(UserDict):
             header[outkey] = (self.data[key], self.comments[key])
         # return header
         return header
+
+    def match_key(self, pattern: str) -> List[str]:
+        """
+        Use fnmatch to match a pattern to keys in the header
+
+        :param pattern: str, the pattern to match (containing wildcards)
+
+        :return:
+        """
+        # deal with no wildcards
+        if '*' not in pattern:
+            if pattern in self.data:
+                return [pattern]
+            else:
+                return []
+        # deal with wildcards
+        keys = []
+        for hkey in self.data:
+            if fnmatch.fnmatch(hkey, pattern):
+                keys.append(hkey)
+        return keys
+
+    def find_hkey(self, key_to_find: str, key_to_match: str,
+                  value_to_match: Any) -> Any:
+        """
+        Find a key in the header that matches a key
+
+        :param key_to_find: str, the key to find
+        :param key_to_match: str, the key to match
+        :param value_to_match: Any, the value to match
+
+        :return: Any, the value of the key
+        """
+        func_name = __NAME__ + '.find_hkey()'
+        # deal with key_to_find being None
+        if key_to_find is None:
+            emsg = 'Key to find must not be None. \n\t{0}'
+            raise LblException(emsg.format(func_name))
+        # deal with key_to_match being None
+        if key_to_match is None:
+            emsg = 'Key to match must not be None. \n\t{0}'
+            raise LblException(emsg.format(func_name))
+        # deal with HIERARCH in key_to_find (replace with *)
+        if 'HIERARCH ' in key_to_find:
+            key_to_find = key_to_find.replace('HIERARCH ', '*')
+        # deal with HIERARCH in key_to_match (replace with *)
+        if 'HIERARCH ' in key_to_match:
+            key_to_match = key_to_match.replace('HIERARCH ', '*')
+        # deal with no wildcard in key_to_find
+        if '*' not in key_to_find:
+            emsg = 'Key to find must contain a wildcard. \n\t{0}'
+            raise LblException(emsg.format(func_name))
+        # deal with no wildcard in key_to_match
+        if '*' not in key_to_match:
+            emsg = 'Key to match must contain a wildcard. \n\t{0}'
+            raise LblException(emsg.format(func_name))
+        # get all keys that match the wildcards in key_to_find
+        all_hkeys_find = self.match_key(key_to_find)
+        # get all keys that match the wildcards in key_to_match
+        all_hkeys_type = self.match_key(key_to_match)
+        # deal with no matching keys
+        if len(all_hkeys_find) == 0 or len(all_hkeys_type) == 0:
+            emsg = 'Cannot find keys: {0} in header matching {1}={2}. \n\t{3}'
+            eargs = [key_to_find, key_to_match, value_to_match, func_name]
+            raise LblException(emsg.format(*eargs))
+        # these must agree in length
+        if len(all_hkeys_find) != len(all_hkeys_type):
+            emsg = ('Keys {0} and {1} must have the same length in header. '
+                    '\n\t{2}')
+            eargs = [key_to_find, key_to_match, func_name]
+            raise LblException(emsg.format(*eargs))
+        # loop around key until we find a match - we return the value of that
+        #     match
+        for hkey_find, hkey_type in zip(all_hkeys_find, all_hkeys_type):
+            # get the values and remove any leading/trailling whitespace
+            find_value = self.data[hkey_find].strip()
+            match_value = self.data[hkey_type].strip()
+            # if we have a match return the value
+            if match_value == value_to_match:
+                return find_value
+        # if we get to this point we have not found the key
+        emsg = ('Cannot find keys: {0} in header matching {1}={2}. '
+                '\n\t{3}')
+        eargs = [key_to_find, key_to_match, value_to_match, func_name]
+        raise LblException(emsg.format(*eargs))
 
     def get_hkey(self, key: Union[str, List[str]],
                  filename: Union[str, None] = None,
@@ -357,19 +448,24 @@ class LBLHeader(UserDict):
 # =============================================================================
 # Define functions
 # =============================================================================
-def check_file_exists(filename: str, required: bool = True) -> bool:
+def check_file_exists(filename: str, fkind: Optional[str] = None,
+                      required: bool = True) -> bool:
     """
     Check if a file exists
 
     :param filename: str, the filename
+    :param fkind: str, the type of file we are checking
     :param required: bool, if required raise an error on not existing
     :return:
     """
     if os.path.exists(filename):
         return True
     elif required:
-        emsg = 'File {0} cannot be found'
-        eargs = [filename]
+        if fkind is not None:
+            emsg = '{0} file {1} cannot be found'
+        else:
+            emsg = 'File {1} cannot be found'
+        eargs = [fkind.capitalize(), filename]
         raise LblException(emsg.format(*eargs))
     else:
         return False
@@ -897,10 +993,13 @@ def save_data_to_hdfstore(filename: str, columns: Dict[str, List[np.ndarray]],
 # =============================================================================
 # Define table functions
 # =============================================================================
+TableReturn = Union[Table, Tuple[Table, LBLHeader], None, Tuple[None, None]]
+
+
 def load_table(filename: str, kind: Union[str, None] = None,
                fmt: str = 'fits', get_hdr: bool = False,
-               extname: Optional[str] = None,
-               ) -> Union[Table, Tuple[Table, LBLHeader]]:
+               extname: Optional[str] = None, required: bool = True
+               ) -> TableReturn:
     """
     Standard way to load table
 
@@ -924,6 +1023,13 @@ def load_table(filename: str, kind: Union[str, None] = None,
             else:
                 table = Table.read(filename, format=fmt)
     except Exception as e:
+        if not required:
+            # deal with an expected table + header return
+            if get_hdr:
+                return None, None
+            # otherwise just return None
+            else:
+                return None
         emsg = 'Cannot load {0}. Filename: {1} \n\t{2}: {3}'
         eargs = [kind, filename, type(e), str(e)]
         raise LblException(emsg.format(*eargs))
@@ -957,6 +1063,47 @@ def write_table(filename: str, table: Table, fmt: str = 'fits',
         emsg = 'Cannot write table {0} to disk \n\t{1}: {2}'
         eargs = [filename, type(e), str(e)]
         raise LblException(emsg.format(*eargs))
+
+
+def generate_checksum(filename: str, size: int = 16) -> Optional[str]:
+    """
+    Generate a checksum for a file
+
+    :param filename: str, the filename to generate the checksum for
+
+    :return: str or None, the checksum or None if cannot generate
+    """
+    try:
+        with open(filename, 'rb') as f:
+            # read the file in chunks
+            checksum = hashlib.md5()
+            for chunk in iter(lambda: f.read(4096), b""):
+                checksum.update(chunk)
+            # return the checksum
+            return checksum.hexdigest()[:size]
+    except Exception as _:
+        return None
+
+
+def check_hash(filename: str, prev_checksum: Optional[str] = None) -> bool:
+    """
+    Check the checksum of a file against a previous checksum
+
+    :param filename: str, the filename to check
+    :param prev_checksum: str, the previous checksum to check against
+
+    :return: bool, True if checksums match, False otherwise
+    """
+    # deal with no check sum
+    if prev_checksum is None:
+        return False
+    # generate the checksum for the file
+    str_checksum = generate_checksum(filename)
+    # deal with no checksum
+    if str_checksum is None:
+        return False
+    # compare the checksums
+    return str_checksum == prev_checksum
 
 
 # =============================================================================

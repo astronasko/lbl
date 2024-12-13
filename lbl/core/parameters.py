@@ -81,6 +81,8 @@ params.set(key='DATA_SOURCE', value='None', source=__NAME__,
            arg='--data_source', dtype=str, not_none=True)
 
 # add instrument earth location (for use in astropy.coordinates.EarthLocation)
+# Must be in this list: Must be in this list:
+# https://github.com/astropy/astropy-data/blob/gh-pages/coordinates/sites.json
 params.set(key='EARTH_LOCATION', value=None, source=__NAME__,
            desc='The instrument earth location (for use in '
                 'astropy.coordinates.EarthLocation)',
@@ -140,6 +142,28 @@ params.set(key='TOTAL', value=-1, source=__NAME__, dtype=int,
                 '-1 means no multiprocessing',
            arg='--total')
 
+
+# =============================================================================
+# Define generic instrument parameters
+# =============================================================================
+# add instrument
+params.set(key='GENERIC_INSTRUMENT', value=None, source=__NAME__,
+           desc='The instrument to use when using Generic Instrument',
+           options=base.INSTRUMENTS, dtype=str)
+
+# add instrument
+params.set(key='GENERIC_DATA_SOURCE', value=None, source=__NAME__,
+           desc='The data source to use when using Generic Instrument',
+           options=base.INSTRUMENTS, dtype=str)
+
+# add wave min
+params.set(key='GENERIC_WAVEMIN', value=None, source=__NAME__,
+           desc='Wave minimum for Generic Instrument [nm]', dtype=float)
+
+# add wave max
+params.set(key='GENERIC_WAVEMAX', value=None, source=__NAME__,
+           desc='Wave maximum for Generic Instrument [nm]', dtype=float)
+
 # =============================================================================
 # Define common parameters (between compute / compil)
 # =============================================================================
@@ -192,7 +216,7 @@ params.set(key='TEMPLATE_FILE', value=None, source=__NAME__,
            arg='--template', dtype=str)
 
 # define the input files
-params.set(key='INPUT_FILE', value=None, source=__NAME__,
+params.set(key='INPUT_FILE', value='*', source=__NAME__,
            desc='The input file expression to use (i.e. *e2dsff*AB.fits)',
            arg='--input_file', dtype=str,
            not_none=True)
@@ -313,7 +337,16 @@ params.set(key='RESPROJ_TABLES', value=None, source=__NAME__,
                  'column name that will propagate into the finale RDB '
                  'table and the value is the filename of the table. The '
                  'table must follow a number of characteristics explained '
-                 'on the LBL  website.'), not_none=True)
+                 'on the LBL  website. Files should be in the lbl/models '
+                 'directory (custom ones can be used). e.g.: '
+                 '\nDTEMP3000 = temperature_gradient_3000.fits'
+                 '\nDTEMP3500 = temperature_gradient_3500.fits'
+                 '\nDTEMP4000 = temperature_gradient_4000.fits'
+                 '\nDTEMP4500 = temperature_gradient_4500.fits'
+                 '\nDTEMP5000 = temperature_gradient_5000.fits'
+                 '\nDTEMP5500 = temperature_gradient_5500.fits'
+                 '\nDTEMP6000 = temperature_gradient_6000.fits'),
+           not_none=True)
 
 # Rotational velocity parameters, should be a list of two values, one being
 #     the epsilon and the other one being the vsini in km/s as defined in the
@@ -570,14 +603,15 @@ params.set(key='MODEL_REPO_URL',
 
 # define the model files
 MODEL_FILES = dict()
-# TODO put in per-instrument profiles
-MODEL_FILES['Mdwarf Temperature Gradient Table'] = 'Mdwarf_temp_gradient.fits'
-MODEL_FILES['Mdwarf Mask [HARPS]'] = 'mdwarf_harps.fits'
-MODEL_FILES['Mdwarf Mask [SOPHIE]'] = 'mdwarf_harps.fits'
-MODEL_FILES['Mdwarf Mask [NIRPS-HA]'] = 'mdwarf_nirps_ha.fits'
-MODEL_FILES['Mdwarf Mask [NIRPS-HE]'] = 'mdwarf_nirps_he.fits'
-MODEL_FILES['Mdwarf Mask [SPIROU]'] = 'mdwarf_spirou.fits'
 MODEL_FILES['Tapas file'] = 'tapas_lbl.fits'
+MODEL_FILES['DTemp 3000 gradient file'] = 'temperature_gradient_3000.fits'
+MODEL_FILES['DTemp 3500 gradient file'] = 'temperature_gradient_3500.fits'
+MODEL_FILES['DTemp 4000 gradient file'] = 'temperature_gradient_4000.fits'
+MODEL_FILES['DTemp 4500 gradient file'] = 'temperature_gradient_4500.fits'
+MODEL_FILES['DTemp 5000 gradient file'] = 'temperature_gradient_5000.fits'
+MODEL_FILES['DTemp 5500 gradient file'] = 'temperature_gradient_5500.fits'
+MODEL_FILES['DTemp 6000 gradient file'] = 'temperature_gradient_6000.fits'
+
 
 # define a dictionary of model files to be downloaded from the MODEL_REPO_URL
 params.set(key='MODEL_FILES', value=MODEL_FILES, source=__NAME__,
@@ -706,6 +740,10 @@ params.set('MAX_CONVERGENCE_TEMPLATE_RV', 100, source=__NAME__)
 # ignore weights below this value for the template construction
 params.set('TEMPLATE_WEIGHT_MIN', 0.1, source=__NAME__)
 
+# define the mnimal SNR required for a pixel to be considered valid in
+# the template
+params.set('TEMPLATE_SNR_THRES', 10, source=__NAME__)
+
 # =============================================================================
 # Define other parameters
 # =============================================================================
@@ -741,9 +779,29 @@ params.set(key='KW_BERV', value=None, source=__NAME__,
            desc='the barycentric correction keyword', not_none=True,
            fp_flag=True)
 
+# The input science data are blaze corrected
+params.set(key='BLAZE_CORRECTED', value=None, source=__NAME__,
+           desc='The input science data are blaze corrected', not_none=True)
+
 # define the Blaze calibration file
 params.set(key='KW_BLAZE_FILE', value=None, source=__NAME__,
            desc='The Blaze calibration file', not_none=True)
+
+# blaze file may be difference we need to define three keys to search
+#   for it in the header
+# 1. The header key that gives the blaze file name (with wildcards)
+params.set('KW_BLAZE_FILE_WILDF', value=None, source=__NAME__,
+           desc='The header key that gives the blaze file name '
+                '(with wildcards)')
+
+# 2. The header key that tells us key 1 is a blaze file
+params.set('KW_BLAZE_FILE_WILDM', value=None, source=__NAME__,
+            desc='The header key that tells us key 1 is a blaze file')
+
+# 3. The value of the header key that tells us key 1 is a blaze file
+params.set('KW_BLAZE_FILE_WILDV', value=None, source=__NAME__,
+            desc='The value of the header key that tells us key 1 is a '
+                 'blaze file')
 
 # define the number of iterations
 params.set(key='KW_NITERATIONS', value='ITE_RV', source=__NAME__,
@@ -960,6 +1018,16 @@ params.set(key='KW_TEMPLATE_BERVBINS', value='LBLTBRVB', source=__NAME__,
 params.set(key='KW_INST_DRIFT', value=None, source=__NAME__, not_none=False,
            desc='define the instrumental drift key word in m/s',
            comment='Instrumental drift in m/s')
+
+# Define the mask file used
+params.set(key='KW_LBLMASK', value='LBLMASK', source=__NAME__, not_none=False,
+           desc='define the mask file used',
+           comment='The mask file used')
+
+# Define the raw hash
+params.set(key='KW_RAW_HASH', value='LBLRHASH', source=__NAME__,
+           desc='The input science file hash',
+           comment='The input science file hash')
 
 
 # =============================================================================
