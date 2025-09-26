@@ -390,6 +390,41 @@ def odd_ratio_mean(value: np.ndarray, error: np.ndarray,
     # return the guess and bulk error
     return guess, bulk_error
 
+# Set "nopython" mode for best performance, equivalent to @nji
+@jit(nopython=True)
+def odd_ratio_linfit(x, y, yerr):
+    """
+    Fit a linear model to the data using an iterative weighted least squares method.
+
+    :param x: Abscissa
+    :param y: Ordinate
+    :param yerr: Error on the ordinate
+    :return: Linear fit and error on the fit
+    """
+    # Remove NaN values
+    g = np.isfinite(y + yerr + x)
+    x = x[g]
+    y = y[g]
+    yerr = yerr[g]
+    # Initialize weights
+    w = np.ones(len(x))
+
+    # Iterate until weights converge
+    sum = 1.0
+    sum0 = 0.0
+    while np.abs(sum0 - sum) > 1e-6:
+        sum0 = np.sum(w)
+        # Fit the data with current weights
+        fit, sig = np.polyfit(x, y, 1, w=w / yerr, cov=True)
+        errfit = np.sqrt(np.diag(sig))
+        # Compute residuals and update weights
+        res = (y - np.polyval(fit, x)) / yerr
+        p1 = np.exp(-0.5 * res ** 2)
+        p2 = 1e-6
+        w = p1 / (p1 + p2)
+        sum = np.sum(w)
+
+    return fit, errfit
 
 # =============================================================================
 # Define general math functions
