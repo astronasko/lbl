@@ -176,7 +176,23 @@ def __main__(inst: InstrumentsType, **kwargs):
     # cut down the line table
     line_table = line_table[weight_nsig]
     # -------------------------------------------------------------------------
-    # Step 7: Write masks to file
+    # Step 7: Calculate the temperature response of the lines
+    # -------------------------------------------------------------------------
+    # Shift template to vsys = 0
+    template_table_vsys0 = template_table.copy()
+    if not flag_calib and sys_vel != 0.0:
+        template_table_vsys0['WAVELENGTH'] = mp.doppler_shift(
+            template_table['WAVELENGTH'],
+            -1000*sys_vel
+        )
+    # Compute temperature response per line
+    line_table['temp_response'] = general.get_temp_response(
+        inst,
+        line_table,
+        template_table_vsys0
+    )
+    # -------------------------------------------------------------------------
+    # Step 8: Write masks to file
     # -------------------------------------------------------------------------
     # get the positive and negative masks
     neg_mask = line_table['w_mask'] > 0
@@ -189,7 +205,7 @@ def __main__(inst: InstrumentsType, **kwargs):
                     template_hdr)
 
     # -------------------------------------------------------------------------
-    # Step 8: Remove ref table for this mask (we must re-write it)
+    # Step 9: Remove ref table for this mask (we must re-write it)
     # -------------------------------------------------------------------------
     # get ref table filename (None if not set)
     reftable_file, reftable_exists = inst.ref_table_file(lbl_reftable_dir,
