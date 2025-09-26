@@ -3112,6 +3112,47 @@ def get_stellar_models(inst: InstrumentsType, model_dir: str
     # return the wavefile and model file to be used
     return m_wavemap, m_spectrum
 
+def get_temp_response(
+    inst: InstrumentsType,
+    line_table: Table,
+    template_table_vsys0: Table
+) -> np.ndarray:
+    # Pseudofunction; loads the model table, rounded to the nearest 500K
+    model_table = _load_table_nearest_neighbour(inst.params['OBJECT_TEFF'])
+    temp_response = np.full(
+        shape=len(model_table),
+        fill_value=np.nan
+    )
+    for i, (model_table_row, template_table_row) in enumerate(zip(
+        model_table,
+        template_table_vsys0
+    )):
+        # I assume model- and template- tables share WAVE_START and WAVE_END,
+        # but we can assert (asserts should have little overheads but Neil
+        # knows better)
+        line_sta = model_table_row["WAVE_START"]
+        line_end = model_table_row["WAVE_END"]
+
+        # I assume no checks for bands
+
+        # Binary mask to prepare for flux-tempgradient correlation
+        mask  = (model_table.wavelength > line_sta)
+        mask &= (model_table.wavelength < line_end)
+        if np.sum(mask)<10:
+            continue
+        # Attempt a regular polyfit with no xerr, yerr
+        # (I handled np.nans through catching the LinAlgError, but you may have
+        # your own polyfit function; I assume math.robust_polyfit)
+        try:
+            temp_response[i] = np.polyfit(
+                    x=template_table_row.flux[mask],
+                    y=model_table_row.fractional_gradient[mask],
+                    deg=1
+                )[0]
+        except np.linalg.LinAlgError:
+            continue
+
+        return temp_response
 
 def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
     """
