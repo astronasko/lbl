@@ -189,6 +189,7 @@ def __main__(inst: InstrumentsType, **kwargs):
     line_table['temp_response'] = general.get_temp_response(
         inst,
         line_table,
+        models_dir,
         template_table_vsys0
     )
     # -------------------------------------------------------------------------

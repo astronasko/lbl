@@ -17,6 +17,7 @@ import wget
 from astropy import constants
 from astropy import units as uu
 from astropy.table import Table
+from astropy.io import fits
 from scipy import stats
 from scipy.stats import pearsonr
 
@@ -25,6 +26,7 @@ from lbl.core import base
 from lbl.core import base_classes
 from lbl.core import io
 from lbl.core import math as mp
+from lbl.core import parameters
 from lbl.instruments import default
 from lbl.instruments import select
 from lbl.science import plot
@@ -1765,6 +1767,11 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     # adding to the fits table the 3rd derivative projection
     ref_table['d3v'] = d3v
     ref_table['sd3v'] = sd3v
+    # adding to the fits table the LTR zeta, eta
+    ref_table['ltr_zeta'] = ltr_zeta
+    ref_table['sltr_zeta'] = sltr_zeta
+    ref_table['ltr_eta'] = ltr_eta
+    ref_table['sltr_eta'] = sltr_eta
     # calculate the chi2 cdf
     chi2_cdf = 1 - stats.chi2.cdf(ref_table['CHI2'], ref_table['NPIXLINE'])
     ref_table['CHI2_VALID_CDF'] = chi2_cdf
@@ -3115,29 +3122,31 @@ def get_stellar_models(inst: InstrumentsType, model_dir: str
 def get_temp_response(
     inst: InstrumentsType,
     line_table: Table,
+    models_dir: str,
     template_table_vsys0: Table
 ) -> np.ndarray:
     # Pseudofunction; loads the model table, rounded to the nearest 500K
-    model_table = _load_table_nearest_neighbour(inst.params['OBJECT_TEFF'])
+    teff_nn = 500*np.round(inst.params['OBJECT_TEFF']/500)
+    model_table = parameters.MODEL_FILES[f'DTemp {teff_nn:.0f} gradient file']
+    spline_path = os.path.join(models_dir, f'temperature_gradient_{teff_nn:.0f}.fits')
+    # load the table
+    model_table = Table.read(spline_path)
     temp_response = np.full(
         shape=len(model_table),
         fill_value=np.nan
     )
-    for i, (model_table_row, template_table_row) in enumerate(zip(
-        model_table,
-        template_table_vsys0
-    )):
+    for i, line_table_row in enumerate(line_table):
         # I assume model- and template- tables share WAVE_START and WAVE_END,
         # but we can assert (asserts should have little overheads but Neil
         # knows better)
-        line_sta = model_table_row["WAVE_START"]
-        line_end = model_table_row["WAVE_END"]
+        line_sta = line_table_row['ll_mask_s']
+        line_end = line_table_row['ll_mask_e']
 
         # I assume no checks for bands
 
         # Binary mask to prepare for flux-tempgradient correlation
-        mask  = (model_table.wavelength > line_sta)
-        mask &= (model_table.wavelength < line_end)
+        mask  = (model_table['wavelength'] > line_sta)
+        mask &= (model_table['wavelength'] < line_end)
         if np.sum(mask)<10:
             continue
         # Attempt a regular polyfit with no xerr, yerr
@@ -3145,8 +3154,8 @@ def get_temp_response(
         # your own polyfit function; I assume math.robust_polyfit)
         try:
             temp_response[i] = np.polyfit(
-                    x=template_table_row.flux[mask],
-                    y=model_table_row.fractional_gradient[mask],
+                    x=template_table_vsys0['flux'][mask],
+                    y=template_table_vsys0['fractional_gradient'][mask],
                     deg=1
                 )[0]
         except np.linalg.LinAlgError:
