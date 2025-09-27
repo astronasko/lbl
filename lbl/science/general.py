@@ -1267,6 +1267,10 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     sd0v = np.full(len(ref_table['WAVE_START']), np.nan)
     sd2v = np.full(len(ref_table['WAVE_START']), np.nan)
     sd3v = np.full(len(ref_table['WAVE_START']), np.nan)
+    ltr_zeta = np.full(len(ref_table['WAVE_START']), np.nan)
+    sltr_zeta = np.full(len(ref_table['WAVE_START']), np.nan)
+    ltr_eta = np.full(len(ref_table['WAVE_START']), np.nan)
+    sltr_eta = np.full(len(ref_table['WAVE_START']), np.nan)
     # keep track of the fraction of each line that is valid
     frac_line_valid = np.zeros(len(ref_table['WAVE_START']))
 
@@ -1662,6 +1666,14 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
                 # -------------------------------------------------------------
                 bout = bouchy_equation_line(d3_seg, diff_seg, mean_rms)
                 d3v[line_it], sd3v[line_it] = bout
+                # -------------------------------------------------------------
+                # work out LTR zeta & eta
+                # -------------------------------------------------------------
+                (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
+                    x=ref_table["temp_sens"],
+                    y=dv,
+                    yerr=sdv
+                )
                 # deal with residual projection tables if required
                 if resproj_flag:
                     # loop around residual project tables
