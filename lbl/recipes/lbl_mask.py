@@ -181,9 +181,9 @@ def __main__(inst: InstrumentsType, **kwargs):
     # Shift template to vsys = 0
     template_table_vsys0 = template_table.copy()
     if not flag_calib and sys_vel != 0.0:
-        template_table_vsys0['WAVELENGTH'] = mp.doppler_shift(
-            template_table['WAVELENGTH'],
-            -1000*sys_vel
+        template_table_vsys0['wavelength'] = mp.doppler_shift(
+            template_table['wavelength'],
+            -1000 * sys_vel
         )
     # Compute temperature response per line
     line_table['temp_response'] = general.get_temp_response(
