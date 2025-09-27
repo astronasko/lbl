@@ -2006,10 +2006,10 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     # error on CRX
     rdb_dict['sCRX'] = np.zeros_like(lblrvfiles, dtype=float)
     # LTR slope and intercept
-    rdb_dict["zeta_ltr"] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict["szeta_ltr"] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict["xi_ltr"] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict["sxi_ltr"] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict["ltr_zeta"] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict["sltr_zeta"] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict["ltr_eta"] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict["sltr_eta"] = np.zeros_like(lblrvfiles, dtype=float)
     # get filename column
     rdb_dict['FILENAME'] = [[]] * len(lblrvfiles)
     # add header keys
