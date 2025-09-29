@@ -178,6 +178,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         ref_dict['LINE_SNR'] = np.array(table['LINE_SNR'])
         ref_dict['LINE_DEPTH'] = np.array(table['LINE_DEPTH'])
         ref_dict['LOCAL_FLUX'] = np.array(table['LOCAL_FLUX'])
+        ref_dict['ltr_metric'] = np.array(table['ltr_metric'])
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.array(table['RMSRATIO'])
         # effective number of pixels in line
@@ -204,6 +205,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         # storage for vectors
         order, wave_start, wave_end, weight_line, xpix = [], [], [], [], []
         line_snr, line_depth, local_flux = [], [], []
+        ltr_metric = []
         # loop around orders
         for order_num in range(wavegrid.shape[0]):
             # get the min max wavelengths for this order
@@ -237,6 +239,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
                 line_snr += list(mask_table['line_snr'][good][:-1])
                 line_depth += list(mask_table['depth'][good][:-1])
                 local_flux += list(mask_table['value'][good][:-1])
+                ltr_metric += list(mask_table['ltr_metric'][good][:-1])
         # make xpix a numpy array
         xpix = np.array(xpix)
         # add to reference dictionary
@@ -249,6 +252,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
             ref_dict['LINE_SNR'] = np.array(line_snr)
         ref_dict['LINE_DEPTH'] = np.array(line_depth)
         ref_dict['LOCAL_FLUX'] = np.array(local_flux)
+        ref_dict['ltr_metric'] = np.array(ltr_metric)
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.zeros_like(xpix, dtype=float)
         # effective number of pixels in line
