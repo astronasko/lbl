@@ -3217,8 +3217,6 @@ def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
     # create vectors for the outputs
     # start of a line
     ll_mask_s = np.zeros_like(line, dtype=float)
-    # end of a line
-    ll_mask_e = np.zeros_like(line, dtype=float)
     # depth of line relative to continuum
     depth = np.zeros_like(line, dtype=float)
     # -------------------------------------------------------------------------
@@ -3250,17 +3248,15 @@ def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
         # set the start equal to the center of the line
         ll_mask_s[it] = wave_cent
         # ---------------------------------------------------------------------
-        # set the end equal to the center of the line
-        ll_mask_e[it] = wave_cent
     # -------------------------------------------------------------------------
     # store in a table for on going use
     table = Table()
-    table['ll_mask_s'] = np.array(ll_mask_s)
-    table['ll_mask_e'] = np.array(ll_mask_e)
-    table['w_mask'] = np.array(w_mask)
-    table['value'] = np.array(f_mask)
-    table['depth'] = np.array(depth)
-    table['line_snr'] = abs(depth * snr_mask)
+    table['ll_mask_s'] = np.array(ll_mask_s)[:-1]
+    table['ll_mask_e'] = ll_mask_s[1:]
+    table['w_mask'] = np.array(w_mask)[:-1]
+    table['value'] = np.array(f_mask)[:-1]
+    table['depth'] = np.array(depth)[:-1]
+    table['line_snr'] = abs(depth * snr_mask)[:-1]
     # return the mask table
     return table
 
