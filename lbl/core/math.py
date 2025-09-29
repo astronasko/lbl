@@ -391,7 +391,8 @@ def odd_ratio_mean(value: np.ndarray, error: np.ndarray,
     return guess, bulk_error
 
 # Set "nopython" mode for best performance, equivalent to @nji
-@jit(nopython=True)
+# @jit(nopython=True)
+# ^ TODO uncommented for now, we have to jit it once we're happy
 def odd_ratio_linfit(x, y, yerr):
     """
     Fit a linear model to the data using an iterative weighted least squares method.
