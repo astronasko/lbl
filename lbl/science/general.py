@@ -3134,17 +3134,19 @@ def get_stellar_models(inst: InstrumentsType, model_dir: str
 def get_temp_response(
     inst: InstrumentsType,
     line_table: Table,
-    models_dir: str,
+    splines,
     template_table_vsys0: Table
 ) -> np.ndarray:
-    # Pseudofunction; loads the model table, rounded to the nearest 500K
+    # Pseudofunction; loads the spline, rounded to the nearest 500K
+    # TODO Neil please generalise to all columns in RESPROJ
     teff_nn = 500*np.round(inst.params['OBJECT_TEFF']/500)
-    model_table = parameters.MODEL_FILES[f'DTemp {teff_nn:.0f} gradient file']
-    spline_path = os.path.join(models_dir, f'temperature_gradient_{teff_nn:.0f}.fits')
+    spline = splines[f'DTEMP{teff_nn:.0f}']
+    template_dtemp = spline(template_table_vsys0['wavelength'])
+    # Default value of spline is 0, assumed to be nan
+    template_dtemp[template_dtemp==0] = np.nan
     # load the table
-    model_table = Table.read(spline_path)
-    temp_response = np.full(
-        shape=len(model_table),
+    ltr_metric = np.full(
+        shape=len(line_table),
         fill_value=np.nan
     )
     for i, line_table_row in enumerate(line_table):
@@ -3157,23 +3159,24 @@ def get_temp_response(
         # I assume no checks for bands
 
         # Binary mask to prepare for flux-tempgradient correlation
-        mask  = (model_table['wavelength'] > line_sta)
-        mask &= (model_table['wavelength'] < line_end)
+        mask  = (template_table_vsys0['wavelength'] > line_sta)
+        mask &= (template_table_vsys0['wavelength'] < line_end)
         if np.sum(mask)<10:
             continue
         # Attempt a regular polyfit with no xerr, yerr
         # (I handled np.nans through catching the LinAlgError, but you may have
         # your own polyfit function; I assume math.robust_polyfit)
         try:
-            temp_response[i] = np.polyfit(
-                    x=template_table_vsys0['flux'][mask],
-                    y=template_table_vsys0['fractional_gradient'][mask],
-                    deg=1
-                )[0]
+            ltr_metric[i] = np.polyfit(
+            x=template_table_vsys0['flux'][mask],
+            y=template_dtemp[mask],
+            deg=1
+        )[0]
         except np.linalg.LinAlgError:
             continue
-
-        return temp_response
+        
+    line_table['ltr_metric'] = ltr_metric
+    return line_table
 
 def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
     """

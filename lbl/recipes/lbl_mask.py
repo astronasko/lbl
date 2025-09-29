@@ -185,11 +185,14 @@ def __main__(inst: InstrumentsType, **kwargs):
             template_table['wavelength'],
             -1000 * sys_vel
         )
+    splines = general.spline_template(inst, template_file,
+                                      1000*sys_vel,
+                                      models_dir)
     # Compute temperature response per line
-    line_table['temp_response'] = general.get_temp_response(
+    line_table = general.get_temp_response(
         inst,
         line_table,
-        models_dir,
+        splines,
         template_table_vsys0
     )
     # -------------------------------------------------------------------------
