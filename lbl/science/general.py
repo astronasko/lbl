@@ -1271,10 +1271,6 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     sd0v = np.full(len(ref_table['WAVE_START']), np.nan)
     sd2v = np.full(len(ref_table['WAVE_START']), np.nan)
     sd3v = np.full(len(ref_table['WAVE_START']), np.nan)
-    ltr_zeta = np.full(len(ref_table['WAVE_START']), np.nan)
-    sltr_zeta = np.full(len(ref_table['WAVE_START']), np.nan)
-    ltr_eta = np.full(len(ref_table['WAVE_START']), np.nan)
-    sltr_eta = np.full(len(ref_table['WAVE_START']), np.nan)
     # keep track of the fraction of each line that is valid
     frac_line_valid = np.zeros(len(ref_table['WAVE_START']))
 
@@ -1670,14 +1666,6 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
                 # -------------------------------------------------------------
                 bout = bouchy_equation_line(d3_seg, diff_seg, mean_rms)
                 d3v[line_it], sd3v[line_it] = bout
-                # -------------------------------------------------------------
-                # work out LTR zeta & eta
-                # -------------------------------------------------------------
-                (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
-                    x=ref_table["temp_sens"],
-                    y=dv,
-                    yerr=sdv
-                )
                 # deal with residual projection tables if required
                 if resproj_flag:
                     # loop around residual project tables
@@ -1783,11 +1771,6 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     # adding to the fits table the 3rd derivative projection
     ref_table['d3v'] = d3v
     ref_table['sd3v'] = sd3v
-    # adding to the fits table the LTR zeta, eta
-    ref_table['ltr_zeta'] = ltr_zeta
-    ref_table['sltr_zeta'] = sltr_zeta
-    ref_table['ltr_eta'] = ltr_eta
-    ref_table['sltr_eta'] = sltr_eta
     # calculate the chi2 cdf
     chi2_cdf = 1 - stats.chi2.cdf(ref_table['CHI2'], ref_table['NPIXLINE'])
     ref_table['CHI2_VALID_CDF'] = chi2_cdf
@@ -2028,11 +2011,12 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     rdb_dict['CRX'] = np.zeros_like(lblrvfiles, dtype=float)
     # error on CRX
     rdb_dict['sCRX'] = np.zeros_like(lblrvfiles, dtype=float)
-    # LTR slope and intercept
-    rdb_dict["ltr_zeta"] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict["sltr_zeta"] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict["ltr_eta"] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict["sltr_eta"] = np.zeros_like(lblrvfiles, dtype=float)
+    # Temperature response, LTR slope and intercept
+    # TODO Neil please generalise to all DTEMPs
+    rdb_dict['ltr_zeta_DTEMP4000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['sltr_zeta_DTEMP4000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['ltr_eta_DTEMP4000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['sltr_eta_DTEMP4000'] = np.zeros_like(lblrvfiles, dtype=float)
     # get filename column
     rdb_dict['FILENAME'] = [[]] * len(lblrvfiles)
     # add header keys
@@ -2069,6 +2053,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     # get columns of rvtable0
     dv0 = np.array(rvtable0['dv'])
     sdv0 = np.array(rvtable0['sdv'])
+    ltr_metric = np.array(rvtable0['ltr_metric'])
     # size of arrays
     nby, nbx = len(lblrvfiles), np.sum(good)
     # set up rv and dvrms
@@ -2523,6 +2508,12 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             # get the crx values
             crx = scoeffs_crx[0]
             scrx = np.sqrt(scov_crx[0, 0])
+            # work out LTR zeta and eta
+            (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
+                x=np.array(rvtable['ltr_metric']),
+                y=np.array(rvtable['dv']),
+                yerr=np.array(rvtable['sdv'])
+            )
             # see whether we need another iteration
             if np.abs(achromatic_velo - prev_velo) < 0.1 * sig_achromatic_velo:
                 # if within 10% of errors break
@@ -2571,6 +2562,11 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         rdb_dict['svrad_chromatic_slope'][row] = sig_chromatic_slope
         rdb_dict['CRX'][row] = crx
         rdb_dict['sCRX'][row] = scrx
+        # TODO Neil please generalise to all DTEMPs
+        rdb_dict['ltr_zeta_DTEMP4000'][row] = ltr_zeta
+        rdb_dict['sltr_zeta_DTEMP4000'][row] = sltr_zeta
+        rdb_dict['ltr_eta_DTEMP4000'][row] = ltr_eta
+        rdb_dict['sltr_eta_DTEMP4000'][row] = sltr_eta
         # ---------------------------------------------------------------------
         # Per-band per region RV measurements
         # ---------------------------------------------------------------------
