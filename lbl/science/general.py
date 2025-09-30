@@ -3143,9 +3143,13 @@ def get_temp_response(
     # TODO Neil please generalise to all columns in RESPROJ
     teff_nn = 500*np.round(inst.params['OBJECT_TEFF']/500)
     spline = splines[f'DTEMP{teff_nn:.0f}']
-    template_dtemp = spline(template_table_vsys0['wavelength'])
+
+    template_wav = template_table_vsys0['wavelength']
+    template_dtemp = spline(template_wav)
     # Default value of spline is 0, assumed to be nan
     template_dtemp[template_dtemp==0] = np.nan
+    # Get template flux and high-pass it
+    template_flux  = template_table_vsys0['flux'] # TODO high-pass it
     # load the table
     ltr_metric = np.full(
         shape=len(line_table),
@@ -3161,8 +3165,8 @@ def get_temp_response(
         # I assume no checks for bands
 
         # Binary mask to prepare for flux-tempgradient correlation
-        mask  = (template_table_vsys0['wavelength'] > line_sta)
-        mask &= (template_table_vsys0['wavelength'] < line_end)
+        mask  = (template_wav > line_sta)
+        mask &= (template_wav < line_end)
         if np.sum(mask)<10:
             continue
         # Attempt a regular polyfit with no xerr, yerr
