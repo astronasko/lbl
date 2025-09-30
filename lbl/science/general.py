@@ -3174,7 +3174,7 @@ def get_temp_response(
         # your own polyfit function; I assume math.robust_polyfit)
         try:
             ltr_metric[i] = np.polyfit(
-            x=template_table_vsys0['flux'][mask],
+            x=template_flux[mask],
             y=template_dtemp[mask],
             deg=1
         )[0]
