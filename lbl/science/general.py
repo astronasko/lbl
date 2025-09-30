@@ -3144,12 +3144,12 @@ def get_temp_response(
     teff_nn = 500*np.round(inst.params['OBJECT_TEFF']/500)
     spline = splines[f'DTEMP{teff_nn:.0f}']
 
-    template_wav = template_table_vsys0['wavelength']
+    template_wav = np.array(template_table_vsys0['wavelength'])
     template_dtemp = spline(template_wav)
     # Default value of spline is 0, assumed to be nan
     template_dtemp[template_dtemp==0] = np.nan
     # Get template flux and high-pass it
-    template_flux  = template_table_vsys0['flux'] # TODO high-pass it
+    template_flux  = np.array(template_table_vsys0['flux']) # TODO high-pass it
     # load the table
     ltr_metric = np.full(
         shape=len(line_table),
