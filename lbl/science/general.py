@@ -2062,6 +2062,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     d2v_arr, sd2v_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     d3v_arr, sd3v_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     contrast_arr, scontrast_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
+    ltr_metric_arr = np.zeros([nby, nbx])
 
     # projection model for the rdb_dict
     proj_model = dict()
@@ -2141,6 +2142,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         if not flag_calib:
             dv_arr[row] = rvtable[good]['dv']
             sdv_arr[row] = rvtable[good]['sdv']
+            ltr_metric_arr[row] = rvtable[good]['ltr_metric']
         # else we calculate it using odd ratio mean
         else:
             cal_rv = np.array(rvtable[good]['dv'], dtype=float)
@@ -2510,9 +2512,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             scrx = np.sqrt(scov_crx[0, 0])
             # work out LTR zeta and eta
             (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
-                x=np.array(rvtable['ltr_metric']),
-                y=np.array(rvtable['dv']),
-                yerr=np.array(rvtable['sdv'])
+                x=ltr_metric_arr[row],
+                y=dv_arr[row],
+                yerr=sdv_arr[row]
             )
             # see whether we need another iteration
             if np.abs(achromatic_velo - prev_velo) < 0.1 * sig_achromatic_velo:
