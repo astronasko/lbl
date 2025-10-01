@@ -12,6 +12,7 @@ Created on 2021-08-24
 import os
 
 import numpy as np
+from astropy.table import Table
 
 from lbl.core import base
 from lbl.core import base_classes
@@ -194,14 +195,17 @@ def __main__(inst: InstrumentsType, **kwargs):
     # get the positive and negative masks
     neg_mask = line_table['w_mask'] > 0
     pos_mask = line_table['w_mask'] < 0
+    line_table['ltr_metric'] = 0.
+    line_table_tmp = Table(line_table)
     # Compute temperature response per line
     for mask_i in [pos_mask, neg_mask]:
-        line_table[mask_i] = general.get_temp_response(
+        line_table_tmp[mask_i] = general.get_temp_response(
             inst,
             line_table[mask_i],
             splines,
             template_table_vsys0
         )
+    line_table = Table(line_table_tmp)
     # now normalize the weights
     norm = np.nanmean(np.abs(line_table['w_mask']))
     line_table['w_mask'] = line_table['w_mask'] / norm
