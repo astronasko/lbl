@@ -3288,7 +3288,7 @@ def mask_systemic_velocity(inst: InstrumentsType, line_table: Table,
     # create a spline of the model spectrum
     smodel = mp.iuv_spline(m_wavemap, m_spectrum)
     # get the center of the lines
-    wave_cent = 0.5 * (line_table['ll_mask_s'] + line_table['ll_mask_e'])
+    wave_cent = line_table['ll_mask_s']# + line_table['ll_mask_e'])
     # get a dv range to search across
     dvs = np.arange(-200, 200 + 0.5, 0.5)
     # work out the negative mask

@@ -183,24 +183,25 @@ def __main__(inst: InstrumentsType, **kwargs):
     if not flag_calib and sys_vel != 0.0:
         template_table_vsys0['wavelength'] = mp.doppler_shift(
             template_table['wavelength'],
-            -1000 * sys_vel
+            1000 * sys_vel
         )
     splines = general.spline_template(inst, template_file,
-                                      1000*sys_vel,
+                                      0, # FIX
                                       models_dir)
-    # Compute temperature response per line
-    line_table = general.get_temp_response(
-        inst,
-        line_table,
-        splines,
-        template_table_vsys0
-    )
     # -------------------------------------------------------------------------
     # Step 8: Write masks to file
     # -------------------------------------------------------------------------
     # get the positive and negative masks
     neg_mask = line_table['w_mask'] > 0
     pos_mask = line_table['w_mask'] < 0
+    # Compute temperature response per line
+    for mask_i in [pos_mask, neg_mask]:
+        line_table[mask_i] = general.get_temp_response(
+            inst,
+            line_table[mask_i],
+            splines,
+            template_table_vsys0
+        )
     # now normalize the weights
     norm = np.nanmean(np.abs(line_table['w_mask']))
     line_table['w_mask'] = line_table['w_mask'] / norm
