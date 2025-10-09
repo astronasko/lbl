@@ -3169,17 +3169,17 @@ def get_temp_response(
         mask &= (template_wav < line_end)
         if np.sum(mask)<10:
             continue
-        # Attempt a regular polyfit with no xerr, yerr
-        # (I handled np.nans through catching the LinAlgError, but you may have
-        # your own polyfit function; I assume math.robust_polyfit)
-        try:
-            ltr_metric[i] = np.polyfit(
-                x=template_flux[mask],
-                y=template_dtemp[mask],
-                deg=1
-            )[0]
-        except np.linalg.LinAlgError:
-            continue
+        # Get the ordinary linear slope between flux and temp gradient (no err)
+        x = template_flux[mask]
+        x_mean = np.nanmean(x)
+        y = template_dtemp[mask]
+        y_mean = np.nanmean(y)
+        ltr_metric[i] = np.nansum(
+            (x-x_mean)*(y-y_mean)
+        )
+        ltr_metric[i] /= np.nansum(
+            (x-x_mean)**2
+        )
         
     line_table['ltr_metric'] = ltr_metric
     return line_table
