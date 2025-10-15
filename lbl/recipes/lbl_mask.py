@@ -196,6 +196,7 @@ def __main__(inst: InstrumentsType, **kwargs):
     neg_mask = line_table['w_mask'] > 0
     pos_mask = line_table['w_mask'] < 0
     line_table['ltr_metric'] = 0.
+    line_table['ltr_weight'] = 0.
     line_table_tmp = Table(line_table)
     # Compute temperature response per line
     for mask_i in [pos_mask, neg_mask]:

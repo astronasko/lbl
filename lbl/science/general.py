@@ -179,6 +179,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         ref_dict['LINE_DEPTH'] = np.array(table['LINE_DEPTH'])
         ref_dict['LOCAL_FLUX'] = np.array(table['LOCAL_FLUX'])
         ref_dict['ltr_metric'] = np.array(table['ltr_metric'])
+        ref_dict['ltr_weight'] = np.array(table['ltr_weight'])
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.array(table['RMSRATIO'])
         # effective number of pixels in line
@@ -205,7 +206,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         # storage for vectors
         order, wave_start, wave_end, weight_line, xpix = [], [], [], [], []
         line_snr, line_depth, local_flux = [], [], []
-        ltr_metric = []
+        ltr_metric, ltr_weight = [], []
         # loop around orders
         for order_num in range(wavegrid.shape[0]):
             # get the min max wavelengths for this order
@@ -240,6 +241,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
                 line_depth += list(mask_table['depth'][good][:-1])
                 local_flux += list(mask_table['value'][good][:-1])
                 ltr_metric += list(mask_table['ltr_metric'][good][:-1])
+                ltr_weight += list(mask_table['ltr_weight'][good][:-1])
         # make xpix a numpy array
         xpix = np.array(xpix)
         # add to reference dictionary
@@ -253,6 +255,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         ref_dict['LINE_DEPTH'] = np.array(line_depth)
         ref_dict['LOCAL_FLUX'] = np.array(local_flux)
         ref_dict['ltr_metric'] = np.array(ltr_metric)
+        ref_dict['ltr_weight'] = np.array(ltr_weight)
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.zeros_like(xpix, dtype=float)
         # effective number of pixels in line
@@ -2053,7 +2056,6 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     # get columns of rvtable0
     dv0 = np.array(rvtable0['dv'])
     sdv0 = np.array(rvtable0['sdv'])
-    ltr_metric = np.array(rvtable0['ltr_metric'])
     # size of arrays
     nby, nbx = len(lblrvfiles), np.sum(good)
     # set up rv and dvrms
@@ -2063,6 +2065,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     d3v_arr, sd3v_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     contrast_arr, scontrast_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     ltr_metric_arr = np.zeros([nby, nbx])
+    ltr_weight_arr = np.zeros([nby, nbx])
 
     # projection model for the rdb_dict
     proj_model = dict()
@@ -2143,6 +2146,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             dv_arr[row] = rvtable[good]['dv']
             sdv_arr[row] = rvtable[good]['sdv']
             ltr_metric_arr[row] = rvtable[good]['ltr_metric']
+            ltr_weight_arr[row] = rvtable[good]['ltr_weight']
         # else we calculate it using odd ratio mean
         else:
             cal_rv = np.array(rvtable[good]['dv'], dtype=float)
@@ -3155,6 +3159,7 @@ def get_temp_response(
         shape=len(line_table),
         fill_value=np.nan
     )
+    ltr_weight = np.copy(ltr_metric)
     for i, line_table_row in enumerate(line_table):
         # I assume model- and template- tables share WAVE_START and WAVE_END,
         # but we can assert (asserts should have little overheads but Neil
@@ -3180,8 +3185,12 @@ def get_temp_response(
         ltr_metric[i] /= np.nansum(
             (x-x_mean)**2
         )
+        ltr_weight[i] = np.square(
+            stats.pearsonr(x,y).statistic
+        )
         
     line_table['ltr_metric'] = ltr_metric
+    line_table['ltr_weight'] = ltr_weight
     return line_table
 
 def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
