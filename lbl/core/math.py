@@ -393,7 +393,7 @@ def odd_ratio_mean(value: np.ndarray, error: np.ndarray,
 # Set "nopython" mode for best performance, equivalent to @nji
 # @jit(nopython=True)
 # ^ TODO uncommented for now, we have to jit it once we're happy
-def odd_ratio_linfit(x, y, yerr):
+def odd_ratio_linfit(x, y, yerr, weights=None):
     """
     Fit a linear model to the data using an iterative weighted least squares method.
 
@@ -403,12 +403,16 @@ def odd_ratio_linfit(x, y, yerr):
     :return: Linear fit and error on the fit
     """
     # Remove NaN values
-    g = np.isfinite(y + yerr + x)
+    g = np.isfinite(y + yerr + x + weights)
     x = x[g]
     y = y[g]
     yerr = yerr[g]
-    # Initialize weights
-    w = np.ones(len(x))
+    weights = weights[g]
+    # Initialize iteration weights
+    w = np.ones_like(x)
+    # Initialsie dataset weights
+    if weights is None:
+        weights=np.ones_like(x)
 
     # Iterate until weights converge
     sum = 1.0
@@ -416,7 +420,7 @@ def odd_ratio_linfit(x, y, yerr):
     while np.abs(sum0 - sum) > 1e-6:
         sum0 = np.sum(w)
         # Fit the data with current weights
-        fit, sig = np.polyfit(x, y, 1, w=w / yerr, cov=True)
+        fit, sig = np.polyfit(x, y, 1, w=w*weights / yerr, cov=True)
         errfit = np.sqrt(np.diag(sig))
         # Compute residuals and update weights
         res = (y - np.polyval(fit, x)) / yerr

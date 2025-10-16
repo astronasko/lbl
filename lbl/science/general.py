@@ -2518,7 +2518,8 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
                 x=ltr_metric_arr[row],
                 y=dv_arr[row],
-                yerr=sdv_arr[row]
+                yerr=sdv_arr[row],
+                weights=ltr_weight_arr[row]
             )
             # see whether we need another iteration
             if np.abs(achromatic_velo - prev_velo) < 0.1 * sig_achromatic_velo:
