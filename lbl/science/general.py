@@ -2066,6 +2066,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     contrast_arr, scontrast_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     ltr_metric_arr = np.zeros([nby, nbx])
     ltr_weight_arr = np.zeros([nby, nbx])
+    ltr_bbfact_arr = np.zeros([nby, nbx])
 
     # projection model for the rdb_dict
     proj_model = dict()
@@ -2147,6 +2148,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             sdv_arr[row] = rvtable[good]['sdv']
             ltr_metric_arr[row] = rvtable[good]['ltr_metric']
             ltr_weight_arr[row] = rvtable[good]['ltr_weight']
+            ltr_bbfact_arr[row] = rvtable[good]['ltr_bbfact']
         # else we calculate it using odd ratio mean
         else:
             cal_rv = np.array(rvtable[good]['dv'], dtype=float)
@@ -2516,7 +2518,7 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             scrx = np.sqrt(scov_crx[0, 0])
             # work out LTR zeta and eta
             (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
-                x=ltr_metric_arr[row],
+                x=ltr_metric_arr[row]+ltr_bbfact_arr[row],
                 y=dv_arr[row],
                 yerr=sdv_arr[row],
                 weights=ltr_weight_arr[row]
@@ -3146,7 +3148,8 @@ def get_temp_response(
 ) -> np.ndarray:
     # Pseudofunction; loads the spline, rounded to the nearest 500K
     # TODO Neil please generalise to all columns in RESPROJ
-    teff_nn = 500*np.round(inst.params['OBJECT_TEFF']/500)
+    teff = inst.params['OBJECT_TEFF']
+    teff_nn = 500*np.round(teff/500)
     spline = splines[f'DTEMP{teff_nn:.0f}']
 
     template_wav = np.array(template_table_vsys0['wavelength'])
@@ -3161,20 +3164,21 @@ def get_temp_response(
         fill_value=np.nan
     )
     ltr_weight = np.copy(ltr_metric)
+    ltr_bbfact = np.copy(ltr_metric)
     for i, line_table_row in enumerate(line_table):
         # I assume model- and template- tables share WAVE_START and WAVE_END,
         # but we can assert (asserts should have little overheads but Neil
         # knows better)
         line_sta = line_table_row['ll_mask_s']
         line_end = line_table_row['ll_mask_e']
-
-        # I assume no checks for bands
+        line_cen = (line_sta + line_end) / 2
 
         # Binary mask to prepare for flux-tempgradient correlation
         mask  = (template_wav > line_sta)
         mask &= (template_wav < line_end)
         if np.sum(mask)<10:
             continue
+        # 1. Compute thermal zeta
         # Get the ordinary linear slope between flux and temp gradient (no err)
         x = template_flux[mask]
         x_mean = np.nanmean(x)
@@ -3189,9 +3193,12 @@ def get_temp_response(
         ltr_weight[i] = np.square(
             stats.pearsonr(x,y).statistic
         )
+        # 2. Compute black-body factor
+        ltr_bbfact[i] = mp.blackbody_fractional_derivative(teff, line_cen)
         
     line_table['ltr_metric'] = ltr_metric
     line_table['ltr_weight'] = ltr_weight
+    line_table['ltr_bbfact'] = ltr_bbfact
     return line_table
 
 def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:

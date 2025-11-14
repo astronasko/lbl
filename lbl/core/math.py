@@ -978,6 +978,21 @@ def rot_broad(wvl: np.ndarray, flux: np.ndarray, epsilon: float, vsini: float,
     result = np.convolve(flux, bprof, mode="same") * dwl
     return result
 
+def blackbody_fractional_derivative(T, lambda_nm):
+    """TODO"""
+    # Physical constants
+    h = 6.62607015e-34  # J·s (Planck constant)
+    c = 2.99792458e8    # m/s (speed of light)
+    k_B = 1.380649e-23  # J/K (Boltzmann constant)
+    # Convert wavelength from nm to m
+    lambda_m = lambda_nm * 1e-9
+    # Calculate x = hc/(lambda * k_B * T)
+    x = (h * c) / (lambda_m * k_B * T)
+    # Calculate the fractional derivative
+    exp_x = np.exp(x)
+    frac_derivative = (h * c) / (lambda_m * k_B * T**2) * (exp_x / (exp_x - 1))
+    
+    return frac_derivative
 
 def bin_by_time(longitude: float, time_value: Union[np.ndarray, float],
                 day_frac: float = 0) -> Union[np.ndarray, float]:
