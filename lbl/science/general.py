@@ -2016,10 +2016,10 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     rdb_dict['sCRX'] = np.zeros_like(lblrvfiles, dtype=float)
     # Temperature response, LTR slope and intercept
     # TODO Neil please generalise to all DTEMPs
-    rdb_dict['ltr_zeta4000'] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict['sltr_zeta4000'] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict['ltr_eta4000'] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict['sltr_eta4000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['ZETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['sZETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['ETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['sETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
     # get filename column
     rdb_dict['FILENAME'] = [[]] * len(lblrvfiles)
     # add header keys
@@ -2570,10 +2570,10 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         rdb_dict['CRX'][row] = crx
         rdb_dict['sCRX'][row] = scrx
         # TODO Neil please generalise to all DTEMPs
-        rdb_dict['ltr_zeta4000'][row] = ltr_zeta
-        rdb_dict['sltr_zeta4000'][row] = sltr_zeta
-        rdb_dict['ltr_eta4000'][row] = ltr_eta
-        rdb_dict['sltr_eta4000'][row] = sltr_eta
+        rdb_dict['ZETA0000'][row] = ltr_zeta
+        rdb_dict['sZETA0000'][row] = sltr_zeta
+        rdb_dict['ETA0000'][row] = ltr_eta
+        rdb_dict['sETA0000'][row] = sltr_eta
         # ---------------------------------------------------------------------
         # Per-band per region RV measurements
         # ---------------------------------------------------------------------
