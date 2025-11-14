@@ -180,6 +180,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         ref_dict['LOCAL_FLUX'] = np.array(table['LOCAL_FLUX'])
         ref_dict['ltr_metric'] = np.array(table['ltr_metric'])
         ref_dict['ltr_weight'] = np.array(table['ltr_weight'])
+        ref_dict['ltr_bbfact'] = np.array(table['ltr_bbfact'])
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.array(table['RMSRATIO'])
         # effective number of pixels in line
@@ -242,6 +243,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
                 local_flux += list(mask_table['value'][good][:-1])
                 ltr_metric += list(mask_table['ltr_metric'][good][:-1])
                 ltr_weight += list(mask_table['ltr_weight'][good][:-1])
+                ltr_bbfact += list(mask_table['ltr_bbfact'][good][:-1])
         # make xpix a numpy array
         xpix = np.array(xpix)
         # add to reference dictionary
@@ -256,6 +258,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         ref_dict['LOCAL_FLUX'] = np.array(local_flux)
         ref_dict['ltr_metric'] = np.array(ltr_metric)
         ref_dict['ltr_weight'] = np.array(ltr_weight)
+        ref_dict['ltr_bbfact'] = np.array(ltr_bbfact)
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.zeros_like(xpix, dtype=float)
         # effective number of pixels in line
