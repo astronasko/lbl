@@ -207,7 +207,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         # storage for vectors
         order, wave_start, wave_end, weight_line, xpix = [], [], [], [], []
         line_snr, line_depth, local_flux = [], [], []
-        ltr_metric, ltr_weight = [], []
+        ltr_metric, ltr_weight, ltr_bbfact = [], [], []
         # loop around orders
         for order_num in range(wavegrid.shape[0]):
             # get the min max wavelengths for this order
