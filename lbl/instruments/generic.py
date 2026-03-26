@@ -45,7 +45,9 @@ class Generic(Instrument):
         # call to super function
         super().__init__('Generic')
         # extra parameters (specific to instrument)
-        self.default_template_name = 'Template_{0}_Generic.fits'
+        self.default_template_name = 'LBL_Template_{0}_generic.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_generic.fits'
+        self.default_sample_wave_name = 'sample_wave_grid.fits'
         # define wave limits in nm
         self.wavemin = 377.189
         self.wavemax = 790.788
@@ -150,8 +152,8 @@ class Generic(Instrument):
         # Set FLUX_EXTENSION_NAME
         self.param_set('FLUX_EXTENSION_NAME', 'FLUX', source=func_name)
         # define the name of the sample wave grid file (saved to the calib dir)
-        self.param_set('SAMPLE_WAVE_GRID_FILE',
-                        'sample_wave_grid.fits', source=func_name)
+        self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name, 
+                       source=func_name)
         # define the FP reference string that defines that an FP observation was
         #    a reference (calibration) file - should be a list of strings
         # Question: Check DRP TYPE for STAR,FP file
@@ -340,43 +342,18 @@ class Generic(Instrument):
             else:
                 # get absolute path
                 abspath = os.path.join(mask_directory, basename)
-        elif self.params['OBJECT_TEMPLATE'] is None:
-            raise LblException('OBJECT_TEMPLATE name must be defined')
+        elif self.params['OBJECT_COMPARISON'] is None:
+            raise LblException('OBJECT_COMPARISON name must be defined')
         else:
-            objname = self.params['OBJECT_TEMPLATE']
+            objname = self.params['OBJECT_COMPARISON']
             # define base name
-            basename = '{0}_{1}.fits'.format(objname, mask_type)
+            basename = self.default_mask_name.format(obj=objname,
+                                                     mtype=mask_type)
             # get absolute path
             abspath = os.path.join(mask_directory, basename)
         # check that this file exists
         if required:
             io.check_file_exists(abspath, 'mask')
-        # return absolute path
-        return abspath
-
-    def template_file(self, directory: str, required: bool = True) -> str:
-        """
-        Make the absolute path for the template file
-
-        :param directory: str, the directory the file is located at
-        :param required: bool, if True checks that file exists on disk
-
-        :return: absolute path to template file
-        """
-        # deal with no object template
-        self._set_object_template()
-        # set template name
-        objname = self.params['OBJECT_TEMPLATE']
-        # get template file
-        if self.params['TEMPLATE_FILE'] is None:
-            basename = self.default_template_name.format(objname)
-        else:
-            basename = self.params['TEMPLATE_FILE']
-        # get absolute path
-        abspath = os.path.join(directory, basename)
-        # check that this file exists
-        if required:
-            io.check_file_exists(abspath, 'template')
         # return absolute path
         return abspath
 

@@ -59,6 +59,7 @@ class NIRPS(Instrument):
         super().__init__(name)
         # extra parameters (specific to instrument)
         self.default_template_name = None  # set in child classes
+        self.default_sample_wave_name = None # set in child classes
         # set parameters for instrument
         self.params = params
         # override params
@@ -100,6 +101,8 @@ class NIRPS(Instrument):
                         value=None)
         # define the High pass width in km/s
         self.param_set('HP_WIDTH', 500, source=func_name)
+        # approximate mean resolution in lambda/dlambda
+        self.param_set('APPROX_RESOLUTION', 80000, source=func_name)
         # define the SNR cut off threshold
         self.param_set('SNR_THRESHOLD', 10, source=func_name)
         # define which bands to use for the clean CCF (see astro.ccf_regions)
@@ -131,8 +134,8 @@ class NIRPS(Instrument):
         # define the reference wavelength used in the slope fitting in nm
         self.param_set('COMPIL_SLOPE_REF_WAVE', 1600, source=func_name)
         # define the name of the sample wave grid file (saved to the calib dir)
-        self.param_set('SAMPLE_WAVE_GRID_FILE',
-                        'sample_wave_grid_nirps_ha.fits', source=func_name)
+        self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name,
+                       source=func_name)
         # define the FP reference string that defines that an FP observation was
         #    a reference (calibration) file - should be a list of strings
         self.param_set('FP_REF_LIST', ['FP_FP'], source=func_name)
@@ -311,43 +314,18 @@ class NIRPS(Instrument):
             else:
                 # get absolute path
                 abspath = os.path.join(mask_directory, basename)
-        elif self.params['OBJECT_TEMPLATE'] is None:
-            raise LblException('OBJECT_TEMPLATE name must be defined')
+        elif self.params['OBJECT_COMPARISON'] is None:
+            raise LblException('OBJECT_COMPARISON name must be defined')
         else:
-            objname = self.params['OBJECT_TEMPLATE']
+            objname = self.params['OBJECT_COMPARISON']
             # define base name
-            basename = '{0}_{1}.fits'.format(objname, mask_type)
+            basename = self.default_mask_name.format(obj=objname,
+                                                     mtype=mask_type)
             # get absolute path
             abspath = os.path.join(mask_directory, basename)
         # check that this file exists
         if required:
             io.check_file_exists(abspath, 'mask')
-        # return absolute path
-        return abspath
-
-    def template_file(self, directory: str, required: bool = True) -> str:
-        """
-        Make the absolute path for the template file
-
-        :param directory: str, the directory the file is located at
-        :param required: bool, if True checks that file exists on disk
-
-        :return: absolute path to template file
-        """
-        # deal with no object template
-        self._set_object_template()
-        # set template name
-        objname = self.params['OBJECT_TEMPLATE']
-        # get template file
-        if self.params['TEMPLATE_FILE'] is None:
-            basename = 'Template_s1dv_{0}_sc1d_v_file_A.fits'.format(objname)
-        else:
-            basename = self.params['TEMPLATE_FILE']
-        # get absolute path
-        abspath = os.path.join(directory, basename)
-        # check that this file exists
-        if required:
-            io.check_file_exists(abspath, 'template')
         # return absolute path
         return abspath
 
@@ -571,25 +549,49 @@ class NIRPS(Instrument):
         # get xpix
         xpix = np.arange(nbx)
         # ---------------------------------------------------------------------
-        # get wave order from header
-        waveordn = sci_hdr.get_hkey(kw_waveordn, science_filename, dtype=int)
-        wavedegn = sci_hdr.get_hkey(kw_wavedegn, science_filename, dtype=int)
-        # get the wave 2d list
-        wavecoeffs = sci_hdr.get_hkey_2d(key=kw_wavecoeffs,
-                                         dim1=waveordn, dim2=wavedegn + 1,
-                                         filename=science_filename)
+        # We need to check whether we have wavecoeffs key in header
+        # New versions of APERO do not have the wave coefficients in the
+        # header and we need to read a wave solution
         # ---------------------------------------------------------------------
-        # convert to wave map
-        wavemap = np.zeros([waveordn, nbx])
-        for order_num in range(waveordn):
-            # we can have two type of polynomial type
-            #  TODO: in future should only be chebyshev
-            if poly_type == 'Chebyshev':
-                wavemap[order_num] = mp.val_cheby(wavecoeffs[order_num], xpix,
-                                                  domain=[0, nbx])
-            else:
-                wavemap[order_num] = np.polyval(wavecoeffs[order_num][::-1],
-                                                xpix)
+        if kw_wavecoeffs.format(0, 0) in sci_hdr.keys():
+            # get wave order from header
+            waveordn = sci_hdr.get_hkey(kw_waveordn, science_filename,
+                                        dtype=int)
+            wavedegn = sci_hdr.get_hkey(kw_wavedegn, science_filename,
+                                        dtype=int)
+            # get the wave 2d list
+            wavecoeffs = sci_hdr.get_hkey_2d(key=kw_wavecoeffs,
+                                             dim1=waveordn, dim2=wavedegn + 1,
+                                             filename=science_filename)
+            # ---------------------------------------------------------------------
+            # convert to wave map
+            wavemap = np.zeros([waveordn, nbx])
+            for order_num in range(waveordn):
+                # we can have two type of polynomial type
+                #  TODO: in future should only be chebyshev
+                if poly_type == 'Chebyshev':
+                    wavemap[order_num] = mp.val_cheby(wavecoeffs[order_num],
+                                                      xpix, domain=[0, nbx])
+                else:
+                    wavemap[order_num] = np.polyval(wavecoeffs[order_num][::-1],
+                                                    xpix)
+        # ---------------------------------------------------------------------
+        # fall back method requires a wave solution file in the calib
+        else:
+            # get calibration directory
+            calib_dir = str(os.path.join(self.params['DATA_DIR'],
+                                         self.params['CALIB_SUBDIR']))
+            # -----------------------------------------------------------------
+            # load wave solution file
+            wavefile = sci_hdr.get_hkey(self.params['KW_CDBWAVE'],
+                                        science_filename)
+            # get the wave solution file path
+            wavepath = os.path.join(calib_dir, wavefile)
+            # check that this file exists
+            io.check_file_exists(wavepath, 'wave solution')
+            # load wave solution
+            wavemap = io.load_fits(wavepath, kind='wave solution fits file')
+        # ---------------------------------------------------------------------
         # ---------------------------------------------------------------------
         # return wave solution map
         return wavemap
@@ -1004,7 +1006,7 @@ class NIRPS(Instrument):
         # print number found
         log.general('\tFound {0} sym FP files'.format(len(symfp_files)))
         # remove these from files
-        files = list(np.array(files)[~np.in1d(files, symfp_files)])
+        files = list(np.array(files)[~np.isin(files, symfp_files)])
         # --------------------------------------------------------------------
         # print progress
         log.general('Locating FP_FP files')
@@ -1017,7 +1019,7 @@ class NIRPS(Instrument):
         # print number found
         log.general('\tFound {0} FP_FP files'.format(len(fpfp_files)))
         # remove these from files
-        files = list(np.array(files)[~np.in1d(files, fpfp_files)])
+        files = list(np.array(files)[~np.isin(files, fpfp_files)])
         # --------------------------------------------------------------------
         # print progress
         log.general('Locating Science files')
@@ -1032,22 +1034,30 @@ class NIRPS(Instrument):
         # print number found
         log.general('\tFound {0} Science files'.format(len(science_files)))
         # remove these from files
-        files = list(np.array(files)[~np.in1d(files, science_files)])
+        files = list(np.array(files)[~np.isin(files, science_files)])
 
         # --------------------------------------------------------------------
         # print progress
         log.general('Locating Template files')
         # find template files
-        if params['TEMPLATE_FILE'] in ['None', '', None]:
-            suffix = 'Template_s1dv_{0}_sc1d_v_file_A.fits'
-            suffix = suffix.format(params['OBJECT_TEMPLATE'])
+        temp_files = []
+        if params['SCIENCE_TEMPLATE_FILE'] in ['None', '', None]:
+            suffix = 'Template_s1dv_{0}_sc1d_v_file_AB.fits'
+            suffix = suffix.format(params['OBJECT_SCIENCE'])
         else:
-            suffix = params['TEMPLATE_FILE']
-        temp_files = io.find_files(files, suffix=suffix)
+            suffix = params['SCIENCE_TEMPLATE_FILE']
+        temp_files += io.find_files(files, suffix=suffix)
+        # for comparison
+        if params['COMPARISON_TEMPLATE_FILE'] in ['None', '', None]:
+            suffix = 'Template_s1dv_{0}_sc1d_v_file_AB.fits'
+            suffix = suffix.format(params['OBJECT_COMPARISON'])
+        else:
+            suffix = params['COMPARISON_TEMPLATE_FILE']
+        temp_files += io.find_files(files, suffix=suffix)
         # print number found
         log.general('\tFound {0} Template files'.format(len(temp_files)))
         # remove these from files
-        files = list(np.array(files)[~np.in1d(files, temp_files)])
+        files = list(np.array(files)[~np.isin(files, temp_files)])
         # --------------------------------------------------------------------
         # print progress
         log.general('Locating Mask files')
@@ -1057,7 +1067,7 @@ class NIRPS(Instrument):
         # print number found
         log.general('\tFound {0} Mask files'.format(len(temp_files)))
         # remove these from files
-        files = list(np.array(files)[~np.in1d(files, mask_files)])
+        files = list(np.array(files)[~np.isin(files, mask_files)])
         # --------------------------------------------------------------------
         # storage of blaze files
         blaze_files = []
@@ -1163,8 +1173,9 @@ class NIRPS_HA(NIRPS):
         # call to super function
         super().__init__(params, args, name)
         # extra parameters (specific to instrument)
-        self.default_template_name = 'Template_{0}_nirps_ha.fits'
-        self.default_template_name = 'Template_{0}_MAROONX_BLUE.fits'
+        self.default_template_name = 'LBL_Template_{0}_nirps_ha.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_nirps_ha.fits'
+        self.default_sample_wave_name = 'sample_wave_grid_nirps_ha.fits'
         # define wave limits in nm
         self.wavemin = 965.707
         self.wavemax = 1949.050
@@ -1192,8 +1203,8 @@ class NIRPS_HA(NIRPS):
         self.param_set('DEFAULT_MASK_FILE', source=func_name,
                         value='mdwarf_nirps_ha.fits')
         # define the name of the sample wave grid file (saved to the calib dir)
-        self.param_set('SAMPLE_WAVE_GRID_FILE',
-                        'sample_wave_grid_nirps_ha.fits', source=func_name)
+        self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name,
+                       source=func_name)
 
     def get_binned_parameters(self) -> Dict[str, list]:
         """
@@ -1245,7 +1256,9 @@ class NIRPS_HE(NIRPS):
         # call to super function
         super().__init__(params, args, name)
         # extra parameters (specific to instrument)
-        self.default_template_name = 'Template_{0}_nirps_he.fits'
+        self.default_template_name = 'LBL_Template_{0}_nirps_he.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_nirps_he.fits'
+        self.default_sample_wave_name = 'sample_wave_grid_nirps_he.fits'
         # define wave limits in nm
         self.wavemin = 965.827
         self.wavemax = 1951.499
@@ -1275,8 +1288,8 @@ class NIRPS_HE(NIRPS):
         self.param_set('DEFAULT_MASK_FILE', source=func_name,
                         value='mdwarf_nirps_he.fits')
         # define the name of the sample wave grid file (saved to the calib dir)
-        self.param_set('SAMPLE_WAVE_GRID_FILE',
-                        'sample_wave_grid_nirps_he.fits', source=func_name)
+        self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name, 
+                       source=func_name)
 
     def get_binned_parameters(self) -> Dict[str, list]:
         """
@@ -1768,7 +1781,9 @@ class NIRPS_HA_ESO(NIRPS_HA):
         # call to super function
         super().__init__(params, args, name)
         # extra parameters (specific to instrument)
-        self.default_template_name = 'Template_{0}_NIRPS_HA_ESO.fits'
+        self.default_template_name = 'LBL_Template_{0}_nirps_ha_eso.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_nirps_ha_eso.fits'
+        self.default_sample_wave_name = 'sample_wave_grid_nirps_ha_eso.fits'
         # define wave limits in nm
         self.wavemin = 966.051
         self.wavemax = 1923.084
@@ -1794,9 +1809,8 @@ class NIRPS_HA_ESO(NIRPS_HA):
         # set parameters to update
         # ---------------------------------------------------------------------
         # define the name of the sample wave grid file (saved to the calib dir)
-        self.param_set('SAMPLE_WAVE_GRID_FILE',
-                        'sample_wave_grid_nirps_ha_ESO.fits',
-                        source=func_name)
+        self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name,
+                       source=func_name)
         # define the FP reference string that defines that an FP observation was
         #    a reference (calibration) file - should be a list of strings
         self.param_set('FP_REF_LIST', ['FP_FP'], source=func_name)
@@ -1888,32 +1902,6 @@ class NIRPS_HA_ESO(NIRPS_HA):
         hdr = io.load_header(filename, kind, extnum, extname)
         # return the LBL Header class
         return io.LBLHeader.from_fits(hdr, filename)
-
-    def template_file(self, directory: str, required: bool = True) -> str:
-        """
-        Make the absolute path for the template file
-
-        :param directory: str, the directory the file is located at
-        :param required: bool, if True checks that file exists on disk
-
-        :return: absolute path to template file
-        """
-        # deal with no object template
-        self._set_object_template()
-        # set template name
-        objname = self.params['OBJECT_TEMPLATE']
-        # get template file
-        if self.params['TEMPLATE_FILE'] is None:
-            basename = self.default_template_name.format(objname)
-        else:
-            basename = self.params['TEMPLATE_FILE']
-        # get absolute path
-        abspath = os.path.join(directory, basename)
-        # check that this file exists
-        if required:
-            io.check_file_exists(abspath, 'template')
-        # return absolute path
-        return abspath
 
     def get_wave_solution(self, science_filename: Union[str, None] = None,
                           data: Union[np.ndarray, None] = None,
@@ -2261,7 +2249,9 @@ class NIRPS_HE_ESO(NIRPS_HE):
         # call to super function
         super().__init__(params, args, name)
         # extra parameters (specific to instrument)
-        self.default_template_name = 'Template_{0}_NIRPS_HE_ESO.fits'
+        self.default_template_name = 'LBL_Template_{0}_nirps_he_eso.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_nirps_he_eso.fits'
+        self.default_sample_wave_name = 'sample_wave_grid_nirps_he_eso.fits'
         # define wave limits in nm
         self.wavemin = 966.051
         self.wavemax = 1923.084
@@ -2287,9 +2277,8 @@ class NIRPS_HE_ESO(NIRPS_HE):
         # set parameters to update
         # ---------------------------------------------------------------------
         # define the name of the sample wave grid file (saved to the calib dir)
-        self.param_set('SAMPLE_WAVE_GRID_FILE',
-                        'sample_wave_grid_nirps_he_ESO.fits',
-                        source=func_name)
+        self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name, 
+                       source=func_name)
         # define the FP reference string that defines that an FP observation was
         #    a reference (calibration) file - should be a list of strings
         self.param_set('FP_REF_LIST', ['FP_FP'], source=func_name)
@@ -2374,32 +2363,6 @@ class NIRPS_HE_ESO(NIRPS_HE):
         self.param_set('KW_TEMPERATURE', None, source=func_name)
         # define the wave solution polynomial type (Chebyshev or numpy)
         self.param_set('WAVE_POLY_TYPE', value='numpy', source=func_name)
-
-    def template_file(self, directory: str, required: bool = True) -> str:
-        """
-        Make the absolute path for the template file
-
-        :param directory: str, the directory the file is located at
-        :param required: bool, if True checks that file exists on disk
-
-        :return: absolute path to template file
-        """
-        # deal with no object template
-        self._set_object_template()
-        # set template name
-        objname = self.params['OBJECT_TEMPLATE']
-        # get template file
-        if self.params['TEMPLATE_FILE'] is None:
-            basename = self.default_template_name.format(objname)
-        else:
-            basename = self.params['TEMPLATE_FILE']
-        # get absolute path
-        abspath = os.path.join(directory, basename)
-        # check that this file exists
-        if required:
-            io.check_file_exists(abspath, 'template')
-        # return absolute path
-        return abspath
 
     def get_wave_solution(self, science_filename: Optional[str] = None,
                           data: Optional[np.ndarray] = None,

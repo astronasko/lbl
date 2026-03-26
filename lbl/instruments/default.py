@@ -22,6 +22,7 @@ from lbl.core import base_classes
 from lbl.core import io
 from lbl.core import math as mp
 
+
 # =============================================================================
 # Define variables
 # =============================================================================
@@ -58,7 +59,9 @@ class Instrument:
         self.orders: Optional[List[int]] = None
         self.norders: Optional[int] = None
         self.npixel: Optional[int] = None
-        self.default_template_name: Optional[str] = None
+        self.default_template_name = 'LBL_Template_{0}_default.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_default.fits'
+        self.default_sample_wave_name = 'sample_wave_grid_default.fits'
         # extension of the science files
         self.science_ext = '.fits'
         # hd5 file definitions
@@ -185,7 +188,9 @@ class Instrument:
             if key in self.params.instances:
                 # get comment from Const.comment
                 comment = self.params.instances[key].comment
-
+        # don't want NaNs
+        if isinstance(value, float) and np.isnan(value):
+            value = None
         # assign value to header
         if comment is None:
             header[key] = (value, '')
@@ -205,7 +210,7 @@ class Instrument:
         :return: absolute path to ref_table file (if it exists) or None
         """
         # deal with no object template
-        self._set_object_template()
+        self._set_object_comparison()
         # set object name
         mask_name = os.path.basename(mask_file).replace('.fits', '')
         # set base name
@@ -236,9 +241,9 @@ class Instrument:
         else:
             sobjname = self.params['OBJECT_SCIENCE']
         # deal with no object template
-        self._set_object_template()
+        self._set_object_comparison()
         # set object template
-        tobjname = self.params['OBJECT_TEMPLATE']
+        tobjname = self.params['OBJECT_COMPARISON']
         # get science file basename
         science_basename = os.path.basename(science_filename)
         science_basename = science_basename.split(self.science_ext)[0]
@@ -297,6 +302,14 @@ class Instrument:
         header = self.set_hkey(header, 'KW_PDATE', value=Time.now().fits)
         # add which lbl instrument was used
         header = self.set_hkey(header, 'KW_INSTRUMENT', value=self.name)
+        # set the LBL output data type
+        header = self.set_hkey(header, 'KW_OUTPUT', 'LBL_FITS')
+        # set the LBL input object object name
+        header = self.set_hkey(header, 'KW_LBL_OBJNAME',
+                                self.params['OBJECT_SCIENCE'].strip())
+        # set the LBL input template object name
+        header = self.set_hkey(header, 'KW_LBL_TMPNAME',
+                               self.params['OBJECT_COMPARISON'].strip())
         # add the mask
         header = self.set_hkey(header, 'KW_LBLMASK', value=outputs['MASK_FILE'])
         # add the template velocity from CCF
@@ -324,12 +337,12 @@ class Instrument:
     def get_lblrv_files(self, directory: str) -> np.ndarray:
         """
         Get all lbl rv files from directory for this object_science and
-        object_template
+        object_comparison
 
         :param directory: str, the lbl rv directory absolute path
 
         :return: list of strs, the lbl rv files for this object_science and
-                 object_template
+                 object_comparison
         """
         # deal with no object
         if self.params['OBJECT_SCIENCE'] is None:
@@ -337,9 +350,9 @@ class Instrument:
         else:
             sobjname = self.params['OBJECT_SCIENCE']
         # deal with no object template
-        self._set_object_template()
+        self._set_object_comparison()
         # set object template
-        tobjname = self.params['OBJECT_TEMPLATE']
+        tobjname = self.params['OBJECT_COMPARISON']
         # construct base name
         bargs = ['*', sobjname, tobjname]
         basename = '{0}_{1}_{2}_lbl.fits'.format(*bargs)
@@ -376,10 +389,10 @@ class Instrument:
         :return:
         """
         # deal with no template set
-        self._set_object_template()
+        self._set_object_comparison()
         # construct base filename
         outargs = [self.params['OBJECT_SCIENCE'],
-                   self.params['OBJECT_TEMPLATE'],
+                   self.params['OBJECT_COMPARISON'],
                    self.params['RDB_SUFFIX']]
         outname1 = 'lbl_{0}_{1}{2}.rdb'.format(*outargs)
         outname2 = 'lbl2_{0}_{1}{2}.rdb'.format(*outargs)
@@ -422,31 +435,117 @@ class Instrument:
         else:
             sobjname = self.params['OBJECT_SCIENCE']
         # deal with no object template
-        self._set_object_template()
+        self._set_object_comparison()
         # set object template
-        tobjname = self.params['OBJECT_TEMPLATE']
+        tobjname = self.params['OBJECT_COMPARISON']
         # return sub directory
         return '{0}_{1}'.format(sobjname, tobjname)
 
-    def _set_object_template(self):
+    def _set_object_comparison(self):
         """
-        Check that if OBJECT_TEMPLATE is not set, if it is not set
+        Check that if OBJECT_COMPARISON is not set, if it is not set
         then set it to OBJECT_SCIENCE
 
-        :return: None - updates OBJECT_TEMPLATE if not set
+        :return: None - updates OBJECT_COMPARISON if not set
         """
         # set function name
-        func_name = __NAME__ + '.Spirou._set_object_template()'
+        func_name = __NAME__ + '.Spirou._set_object_comparison()'
         # deal with no object
         if self.params['OBJECT_SCIENCE'] is None:
             raise LblException('OBJECT_SCIENCE name must be defined')
         else:
             objname = self.params['OBJECT_SCIENCE']
         # deal with no object
-        if self.params['OBJECT_TEMPLATE'] is None:
-            self.param_set('OBJECT_TEMPLATE', value=objname, source=func_name)
+        if self.params['OBJECT_COMPARISON'] is None:
+            self.param_set('OBJECT_COMPARISON', value=objname, source=func_name)
 
-    def write_rdb_fits(self, filename: str, rdb_data: Dict[str, Any]):
+    def check_quality_nan(self, refwave: np.ndarray, wavegrid: np.ndarray,
+                          vectors: List[np.ndarray], vectorname: str):
+        """
+        Check that at least 50% of the data is valid (not NaN) in the template
+        This is done order by order (hence needing refwave) as we expect
+        in some instruments that some orders may have very little data
+
+        :param refwave: np.ndarray, the reference wavelength grid
+                        (shape norders x npixels)
+        :param wavegrid: np.ndarray, the wavelength grid of the data
+                         (shape npixels)
+        :param vectors: list of np.ndarray, the list of vectors to check
+                        (shape of each vector npixels)
+        :param vectorname: str, the name of the vector being checked
+                          (for error message)
+
+        :raises: LblException if less than 50% of the data is valid in the
+                 template
+        :return: None, raises exception if less than 50% of the data is valid
+                 in the template
+        """
+
+        # we check that at least 50% of the data is valid (not NaN) in the template
+        frac_valid = np.ones(refwave.shape[0])
+
+        # need to get back "orders"
+        for ordernum in range(refwave.shape[0]):
+            wavemin = np.nanmin(refwave[ordernum, :])
+            wavemax = np.nanmax(refwave[ordernum, :])
+
+            wavemask = (wavegrid > wavemin) & (wavegrid < wavemax)
+
+            n_valid = 0
+            for vector in vectors:
+                n_valid += np.sum(np.isfinite(vector[wavemask]))
+
+            n_total = np.sum(wavemask)
+            frac_valid[ordernum] = n_valid / n_total
+
+        # we check that at least 50% of the data is valid (not NaN) in the template
+        if np.mean(frac_valid) < 0.5:
+            emsg = ('Less than 50% of the data in "{0}" valid in the template.')
+            emsg = emsg.format(vectorname)
+            for order_num in np.where(frac_valid > 0.5)[0]:
+                emsg += (f'\n\t- Order {order_num} has only '
+                         f'{frac_valid[order_num]:.1%} valid data')
+            raise LblException(emsg)
+        else:
+            log.general(f'Quality control pass: '
+                        f'At least 50% of the data in "{vectorname}" '
+                        f'is valid in the template.')
+
+    def calculate_savgol_template(self, dv_grid: float,
+                                  flux_dict: Dict[str, np.ndarray]):
+        # check if we are using savgol templates
+        if not self.params['USE_SAVGOL_TEMPLATE']:
+            return dict()
+        # get approximate resolution in m/s
+        approx_res = self.params['APPROX_RESOLUTION']
+        # get the rough number of pixels per fwhm
+        pix_per_fwhm = np.round((mp.speed_of_light_ms / dv_grid) / approx_res)
+        # get the window size
+        window_size = int(pix_per_fwhm)
+        # Ensure window_size is odd for scipy
+        window_size = window_size if window_size % 2 == 1 else window_size + 1
+
+        flux_savgol_dict = dict()
+        # loop around all fluxes given
+        for key in flux_dict:
+            # calculate derivatives 0 to 3
+            for deriv in range(0, 4):
+                msg = 'Calculating SavGol derivative {0} for: {1}'
+                margs = [deriv, key]
+                log.general(msg.format(*margs))
+                # get flux from key
+                flux = flux_dict[key]
+                # compute the savgol derivatives order=deriv
+                o_savgol = mp.gaussian_weighted_savgol(flux, window_size,
+                                                      polyorder=3,
+                                                      deriv=deriv, delta=1.0)
+                # push into output dictionary
+                flux_savgol_dict[f'{key}_savgol_d{deriv}'] = o_savgol
+        # return the savgol dictionary
+        return flux_savgol_dict
+
+    def write_rdb_fits(self, filename: str, rdb_data: Dict[str, Any],
+                       rdb_header: Dict[str, Tuple[Any, str]]):
         """
         Write the rdb fits file to disk
 
@@ -460,14 +559,29 @@ class Instrument:
         filename = filename.replace('.rdb', '.fits')
         # populate primary header
         header0 = fits.Header()
+        # ---------------------------------------------------------------------
+        # add header keys to header 0
+        for key in rdb_header:
+            header0[key] = rdb_header[key]
+        # ---------------------------------------------------------------------
         # add custom keys
         header0 = self.set_hkey(header0, 'KW_VERSION', __version__)
         header0 = self.set_hkey(header0, 'KW_VDATE', __date__)
         header0 = self.set_hkey(header0, 'KW_PDATE', Time.now().iso)
         header0 = self.set_hkey(header0, 'KW_INSTRUMENT',
                                 self.params['INSTRUMENT'])
+        # set the LBL output data type
+        header0 = self.set_hkey(header0, 'KW_OUTPUT', 'LBL_RDB_FITS')
+        # set the LBL input object object name
+        header0 = self.set_hkey(header0, 'KW_LBL_OBJNAME',
+                                self.params['OBJECT_SCIENCE'].strip())
+        # set the LBL input template object name
+        header0 = self.set_hkey(header0, 'KW_LBL_TMPNAME',
+                                self.params['OBJECT_COMPARISON'].strip())
+        # ---------------------------------------------------------------------
         # construct the parameter table
-        param_table = self.params.param_table()
+        param_table = self.params.param_table(header0)
+        # ---------------------------------------------------------------------
         # set up data extensions
         datalist = [None, rdb_data['WAVE'],
                     rdb_data['DV'], rdb_data['SDV'],
@@ -516,6 +630,17 @@ class Instrument:
         header = self.set_hkey(header, 'KW_PDATE', Time.now().iso)
         header = self.set_hkey(header, 'KW_INSTRUMENT',
                                self.params['INSTRUMENT'])
+        # set the LBL output data type
+        header = self.set_hkey(header, 'KW_OUTPUT', 'LBL_TEMPLATE')
+        # set the LBL input object object name
+        header = self.set_hkey(header, 'KW_LBL_OBJNAME',
+                                self.params['OBJECT_SCIENCE'].strip())
+        # set the LBL input template object name
+        header = self.set_hkey(header, 'KW_LBL_TMPNAME',
+                               self.params['OBJECT_COMPARISON'].strip())
+        # Write template specific keys
+        header = self.set_hkey(header, 'KW_TEMPLATE_TYPE',
+                               props['template_type'])
         header = self.set_hkey(header, 'KW_TEMPLATE_COVERAGE',
                                value=props['template_coverage'])
         header = self.set_hkey(header, 'KW_TEMPLATE_BERVBINS',
@@ -534,6 +659,12 @@ class Instrument:
         table1['flux_even'] = props['flux_even']
         table1['eflux_even'] = props['eflux_even']
         table1['rms_even'] = props['rms_even']
+        # ---------------------------------------------------------------------
+        # deal with savgol fluxes being None
+        if props['savgol_fluxes'] is not None:
+            # loop around and add to table
+            for key in props['savgol_fluxes']:
+                table1[key] = props['savgol_fluxes'][key]
         # ---------------------------------------------------------------------
         # construct table 2 - the science list
         table2 = Table()
@@ -576,6 +707,15 @@ class Instrument:
         header = self.set_hkey(header, 'KW_PDATE', Time.now().iso)
         header = self.set_hkey(header, 'KW_INSTRUMENT',
                                self.params['INSTRUMENT'])
+        # set the LBL output data type
+        header = self.set_hkey(header, 'KW_OUTPUT', 'LBL_TELLU_CLEAN')
+        # set the LBL input object object name
+        header = self.set_hkey(header, 'KW_LBL_OBJNAME',
+                                self.params['OBJECT_SCIENCE'].strip())
+        # set the LBL input template object name
+        header = self.set_hkey(header, 'KW_LBL_TMPNAME',
+                               self.params['OBJECT_COMPARISON'].strip())
+        # define the telluric parameters
         header = self.set_hkey(header, 'KW_TAU_H2O',
                                props['pre_cleaned_exponent_water'])
         header = self.set_hkey(header, 'KW_TAU_OTHERS',
@@ -654,6 +794,16 @@ class Instrument:
             header = self.set_hkey(header, 'KW_PDATE', Time.now().iso)
             header = self.set_hkey(header, 'KW_INSTRUMENT',
                                    self.params['INSTRUMENT'])
+            # set the LBL output data type
+            header = self.set_hkey(header, 'KW_OUTPUT', 'LBL_MASK')
+            # set the LBL input object object name
+            header = self.set_hkey(header, 'KW_LBL_OBJNAME',
+                                   self.params['OBJECT_SCIENCE'].strip())
+            # set the LBL input template object name
+            header = self.set_hkey(header, 'KW_LBL_TMPNAME',
+                                   self.params['OBJECT_COMPARISON'].strip())
+            # set the LBL mask tpye
+            header = self.set_hkey(header, 'KW_MASK_TYPE', extensions[it])
             # log writing
             msg = 'Writing mask file to disk: {0}'
             log.general(msg.format(new_mask_file))
@@ -729,7 +879,8 @@ class Instrument:
         _ = model_directory, mask_directory
         raise self._not_implemented('mask_file')
 
-    def template_file(self, directory: str, required: bool = True):
+    def template_file(self, directory: str, tkind: str,
+                      required: bool = True) -> str:
         """
         Make the absolute path for the template file
 
@@ -738,8 +889,33 @@ class Instrument:
 
         :return: absolute path to template file
         """
-        _ = self, directory
-        raise self._not_implemented('template_file')
+        # set function name
+        func_name = __NAME__ + '.Instrument.template_file()'
+        # deal with no object template
+        self._set_object_comparison()
+        # set template name
+        if tkind == 'science':
+            objname = self.params['OBJECT_SCIENCE']
+            template_file = self.params['SCIENCE_TEMPLATE_FILE']
+        elif tkind == 'comparison':
+            objname = self.params['OBJECT_COMPARISON']
+            template_file = self.params['COMPARISON_TEMPLATE_FILE']
+        else:
+            emsg = 'tkind must be either "science" or "comparison" for {0}'
+            raise base_classes.LblException(emsg.format(func_name))
+        # ---------------------------------------------------------------------
+        # get template file
+        if template_file is None:
+            basename = self.default_template_name.format(objname)
+        else:
+            basename = template_file
+        # get absolute path
+        abspath = os.path.join(directory, basename)
+        # check that this file exists
+        if required:
+            io.check_file_exists(abspath, '{0} template'.format(tkind))
+        # return absolute path
+        return abspath
 
     def blaze_file(self, directory: str):
         """
@@ -1179,8 +1355,10 @@ class Instrument:
                     'astropy.coordinates.EarthLocation\n\tError {1}: {2}')
             eargs = [earth_location, type(e), str(e)]
             raise base_classes.LblException(emsg.format(*eargs))
+        # get times from rdb table and force to floats
+        times = np.array(rdb_table[kw_mjd], dtype=float)
         # get local time at midnight
-        epoch_values = mp.bin_by_time(loc.lon.value, rdb_table[kw_mjd],
+        epoch_values = mp.bin_by_time(loc.lon.value, times,
                                       day_frac=0)
         # get the unique epoch groups
         epoch_groups = np.unique(epoch_values)

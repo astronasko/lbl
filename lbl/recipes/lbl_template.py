@@ -43,7 +43,7 @@ ARGS_TEMPLATE = [  # core
     # directory
     'DATA_DIR', 'TEMPLATE_SUBDIR', 'SCIENCE_SUBDIR',
     # science
-    'OBJECT_SCIENCE', 'OBJECT_TEMPLATE', 'BLAZE_FILE', 'BLAZE_CORRECTED',
+    'OBJECT_SCIENCE', 'OBJECT_COMPARISON', 'BLAZE_FILE', 'BLAZE_CORRECTED',
     # other
     'VERBOSE', 'PROGRAM',
 ]
@@ -100,14 +100,46 @@ def __main__(inst: InstrumentsType, **kwargs):
         # assert inst type (for python typing later)
         amsg = 'inst must be a valid Instrument class'
         assert isinstance(inst, InstrumentsList), amsg
+
+    # must run the template on BOTH the science and comparison objects
+    # if science and comparison are the same we just run one template
+    if inst.params['OBJECT_SCIENCE'] == inst.params['OBJECT_COMPARISON']:
+        objnames = [str(inst.params['OBJECT_SCIENCE'])]
+        objkinds = ['science']
+    # if comparison is not set, we just run one template on the science object
+    elif inst.params['OBJECT_COMPARISON'] in [None, '', 'None', 'Null']:
+        inst.params['OBJECT_COMPARISON'] = str(inst.params['OBJECT_SCIENCE'])
+        objnames = [str(inst.params['OBJECT_SCIENCE'])]
+        objkinds = ['science']
+    # otherwise we run both
+    else:
+        objnames = [str(inst.params['OBJECT_SCIENCE']),
+                    str(inst.params['OBJECT_COMPARISON'])]
+        objkinds = ['science', 'comparison']
+    # loop around object names
+    for objname, objkind in zip(objnames, objkinds):
+        # print a printout to show which object with are making a template for
+        # only if we have more than one templates to loop around
+        if len(objnames) > 1:
+            log.info('*'*50)
+            lmsg = 'Running template for {0} object: {1}'.format(objkind, objname)
+            log.info(lmsg)
+            log.info('*' * 50)
+        # run the full template code
+        run_template(inst, objname, objkind)
+    # return all local variables (for debug)
+    return locals()
+
+
+def run_template(inst, objname: str, objkind: str):
     # get tqdm
     tqdm = base.tqdm_module(inst.params['USE_TQDM'], log.console_verbosity)
     # must force object science to object template
-    inst.params['OBJECT_SCIENCE'] = str(inst.params['OBJECT_TEMPLATE'])
+    inst.params['OBJECT_SCIENCE'] = str(objname)
     # check data type
     general.check_data_type(inst.params['DATA_TYPE'])
     # get the pixel hp_width [needs to be in m/s]
-    hp_width = inst.params['HP_WIDTH'] * 1000
+    hp_width = float(inst.params['HP_WIDTH']) * 1000
     # -------------------------------------------------------------------------
     # Step 1: Set up data directory
     # -------------------------------------------------------------------------
@@ -118,7 +150,7 @@ def __main__(inst: InstrumentsType, **kwargs):
     # Step 2: Check and set filenames
     # -------------------------------------------------------------------------
     # template filename
-    template_file = inst.template_file(template_dir, required=False)
+    template_file = inst.template_file(template_dir, objkind, required=False)
 
     # -------------------------------------------------------------------------
     # Step 3: Check if template exists
@@ -465,11 +497,14 @@ def __main__(inst: InstrumentsType, **kwargs):
         # to get statistics on the ber-bin rms, we need more than 3
         # bervbins
         log.general('computation done per-berv bin')
+        log.general('\t- computation on flux cube')
         p16, p50, p84 = np.nanpercentile(flux_cube, [16, 50, 84],
                                          axis=1)
         # same for left and right
+        log.general('\t- computation on odd cube')
         p16_odd, p50_odd, p84_odd = np.nanpercentile(odd_cube, [16, 50, 84],
                                                      axis=1)
+        log.general('\t- computation on even cube')
         p16_even, p50_even, p84_even = np.nanpercentile(even_cube, [16, 50, 84],
                                                         axis=1)
         # calculate the rms of each wavelength element
@@ -489,15 +524,17 @@ def __main__(inst: InstrumentsType, **kwargs):
     # We reject domains that are below and SNR = 10
     # TODO -> makes this a global parameter
     # The minimal SNR required for a pixel considered to be valid
-    # We determine the SNR from the -1 to +1 sigma equivalent distribution
-    # of the input spectra
-    snr_threshold = inst.params['TEMPLATE_SNR_THRES']
-    low_snr_odd = snr_odd < snr_threshold
-    p50_odd[low_snr_odd] = np.nan
-    rms_odd[low_snr_odd] = np.nan
-    low_snr_odd = snr_even < snr_threshold
-    p50_even[low_snr_odd] = np.nan
-    rms_odd[low_snr_odd] = np.nan
+    # - only for science data
+    if inst.params['DATA_TYPE'] == 'SCIENCE':
+        # We determine the SNR from the -1 to +1 sigma equivalent distribution
+        # of the input spectra
+        snr_threshold = inst.params['TEMPLATE_SNR_THRES']
+        low_snr_odd = snr_odd < snr_threshold
+        p50_odd[low_snr_odd] = np.nan
+        rms_odd[low_snr_odd] = np.nan
+        low_snr_odd = snr_even < snr_threshold
+        p50_even[low_snr_odd] = np.nan
+        rms_odd[low_snr_odd] = np.nan
     # -------------------------------------------------------------------------
     # other parameters for the header
     nfiles = len(science_files)
@@ -506,14 +543,78 @@ def __main__(inst: InstrumentsType, **kwargs):
     total_nobs_berv = len(np.unique(berv // 1000))  # in m/s
 
     # -------------------------------------------------------------------------
-    # Step 7. Write template
+    # Step 7. check quality of data
+    # -------------------------------------------------------------------------
+    inst.check_quality_nan(refwave, wavegrid, [p50], 'flux')
+    inst.check_quality_nan(refwave, wavegrid, [p50_odd, p50_even],
+                           'flux_odd_even')
+
+    # -------------------------------------------------------------------------
+    # Step 8. Calculate Savitzky-Golay filtered template for better handling
+    #         of higher derivatives
+    # -------------------------------------------------------------------------
+    savgol_fluxes = inst.calculate_savgol_template(dv_grid=grid_step_magic,
+                                                   flux_dict=dict(flux=p50,
+                                                   flux_odd=p50_odd,
+                                                   flux_even=p50_even))
+    # set a key to tell us the type of template created
+    if len(savgol_fluxes) > 0:
+        template_type = 'LBL_SAVGOL'
+        # repeat quality control checks for savgol fluxes
+        for col in savgol_fluxes:
+            # skip odd cols (we will deal with odd/even in even cases)
+            if 'odd' in col:
+                continue
+            # deal with even (odd + even)
+            elif 'even' in col:
+                svec = [savgol_fluxes[col.replace('even', 'odd')],
+                        savgol_fluxes[col]]
+                inst.check_quality_nan(refwave, wavegrid, svec,
+                                       col.replace('even', 'odd_even'))
+            # deal with full orders
+            else:
+                inst.check_quality_nan(refwave, wavegrid, [savgol_fluxes[col]],
+                                       col)
+    else:
+        template_type = 'LBL_NON_SAVGOL'
+
+    # -------------------------------------------------------------------------
+    # Step 9. check quality of data
+    # -------------------------------------------------------------------------
+    # we check that at least 50% of the data is valid (not NaN) in the template
+    frac_valid = np.ones(refwave.shape[0])
+    frac_valid_odd_even = np.ones(refwave.shape[0])
+    frac_valid_savgol = np.ones(refwave.shape[0])
+
+    # need to get back "orders"
+    for ordernum in range(refwave.shape[0]):
+        wavemin = np.nanmin(refwave[ordernum, :])
+        wavemax = np.nanmax(refwave[ordernum, :])
+
+        wavemask = (wavegrid > wavemin) & (wavegrid < wavemax)
+
+        n_valid = np.sum(np.isfinite(p50[wavemask]))
+        n_total = np.sum(wavemask)
+        frac_valid[ordernum] = n_valid / n_total
+
+        # For odd/even we add the number of odd + even
+        # since odd orders have even orders set to nan and vice versa.
+        n_valid_even = np.sum(np.isfinite(p50_even[wavemask]))
+        n_valid_odd = np.sum(np.isfinite(p50_odd[wavemask]))
+        frac_valid_odd_even[ordernum] = (n_valid_even + n_valid_odd) / n_total
+
+
+
+    # -------------------------------------------------------------------------
+    # Step 9. Write template
     # -------------------------------------------------------------------------
     # get props
     props = dict(wavelength=wavegrid, flux=p50, eflux=rms, rms=rms,
                  flux_odd=p50_odd, eflux_odd=rms_odd, flux_even=p50_even,
                  eflux_even=rms_even, rms_odd=rms_odd,
                  rms_even=rms_even, template_coverage=template_coverage,
-                 total_nobs_berv=total_nobs_berv, template_nobs=nfiles)
+                 total_nobs_berv=total_nobs_berv, template_nobs=nfiles,
+                 savgol_fluxes=savgol_fluxes, template_type=template_type)
     # write table
     inst.write_template(template_file, props, refhdr, sci_table)
 

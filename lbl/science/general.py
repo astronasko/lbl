@@ -211,8 +211,8 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         # loop around orders
         for order_num in range(wavegrid.shape[0]):
             # get the min max wavelengths for this order
-            min_wave = np.min(wavegrid[order_num])
-            max_wave = np.max(wavegrid[order_num])
+            min_wave = np.nanmin(wavegrid[order_num])
+            max_wave = np.nanmax(wavegrid[order_num])
             # build a mask for mask lines in this order
             good = mask_table['ll_mask_s'] > min_wave
             good &= mask_table['ll_mask_s'] < max_wave
@@ -286,7 +286,11 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         # write to file
         io.write_table(reftable_file, ref_table,
                        fmt=inst.params['REF_TABLE_FMT'])
-
+    # -------------------------------------------------------------------------
+    # deal with empty ref table (shouldn't happen)
+    if len(ref_dict['ORDER']) == 0:
+        emsg = 'Reference table is empty - something went wrong'
+        raise LblException(emsg)
     # -------------------------------------------------------------------------
     # return table (either loaded from file or constructed from mask +
     #               wave solution)
@@ -339,17 +343,23 @@ def spline_template(inst: InstrumentsType, template_file: str,
     template_table = inst.load_template(template_file)
     # get properties from template table
     twave = np.array(template_table['wavelength'])
-    tflux = np.array(template_table['flux'])
-    # deal with the odd/even templates
-    if 'flux_odd' in template_table.colnames:
-        # this captures the odd/even asymetry in resolution along orders
-        # we have 3 templates, one averaing the odd, one the even and one
-        # having all the flux from the entire ordes
-        tflux_odd = np.array(template_table['flux_odd'])
-        tflux_even = np.array(template_table['flux_even'])
+    # -------------------------------------------------------------------------
+    if not inst.params['USE_SAVGOL_TEMPLATE']:
+        tflux = np.array(template_table['flux'])
+        # deal with the odd/even templates
+        if 'flux_odd' in template_table.colnames:
+            # this captures the odd/even asymetry in resolution along orders
+            # we have 3 templates, one averaing the odd, one the even and one
+            # having all the flux from the entire ordes
+            tflux_odd = np.array(template_table['flux_odd'])
+            tflux_even = np.array(template_table['flux_even'])
+        else:
+            tflux_odd, tflux_even = np.array([]), np.array([])
     else:
-        tflux_odd, tflux_even = np.array([]), np.array([])
-
+        tflux = np.array(template_table['flux_savgol_d0'])
+        tflux_odd = np.array(template_table['flux_odd_savgol_d0'])
+        tflux_even = np.array(template_table['flux_even_savgol_d0'])
+    # -------------------------------------------------------------------------
     # some masking to avoid errors later
     # if we have the n_valid flag in the table, then we must have at least
     # 1/2 of points valid
@@ -406,28 +416,55 @@ def spline_template(inst: InstrumentsType, template_file: str,
     grad_log_wave = np.gradient(np.log(twave))
     # work out the glw_c (grad_log_wave / speed_of_light_ms)
     glw_c = grad_log_wave * speed_of_light_ms
-    # get the derivative of the flux
-    dflux = np.gradient(tflux) / glw_c
-    # get the 2nd derivative of the flux
-    d2flux = np.gradient(dflux) / glw_c
-    # get the 3rd derivative of the flux
-    d3flux = np.gradient(d2flux) / glw_c
-    # deal with the odd/even templates
-    if 'flux_odd' in template_table.colnames:
-        # get the derivative of the flux
-        dflux_odd = np.gradient(tflux_odd) / glw_c
-        dflux_even = np.gradient(tflux_even) / glw_c
-        # get the 2nd derivative of the flux
-        d2flux_odd = np.gradient(dflux_odd) / glw_c
-        d2flux_even = np.gradient(dflux_even) / glw_c
-        # get the 3rd derivative of the flux
-        d3flux_odd = np.gradient(d2flux_odd) / glw_c
-        d3flux_even = np.gradient(d2flux_even) / glw_c
-    else:
-        dflux_odd, dflux_even = np.array([]), np.array([])
-        d2flux_odd, d2flux_even = np.array([]), np.array([])
-        d3flux_odd, d3flux_even = np.array([]), np.array([])
 
+    if not inst.params['USE_SAVGOL_TEMPLATE']:
+        # get the derivative of the flux
+        dflux = np.gradient(tflux) / glw_c
+        # get the 2nd derivative of the flux
+        d2flux = np.gradient(dflux) / glw_c
+        # get the 3rd derivative of the flux
+        d3flux = np.gradient(d2flux) / glw_c
+        # deal with the odd/even templates
+        if 'flux_odd' in template_table.colnames:
+            # get the derivative of the flux
+            dflux_odd = np.gradient(tflux_odd) / glw_c
+            dflux_even = np.gradient(tflux_even) / glw_c
+            # get the 2nd derivative of the flux
+            d2flux_odd = np.gradient(dflux_odd) / glw_c
+            d2flux_even = np.gradient(dflux_even) / glw_c
+            # get the 3rd derivative of the flux
+            d3flux_odd = np.gradient(d2flux_odd) / glw_c
+            d3flux_even = np.gradient(d2flux_even) / glw_c
+        else:
+            dflux_odd, dflux_even = np.array([]), np.array([])
+            d2flux_odd, d2flux_even = np.array([]), np.array([])
+            d3flux_odd, d3flux_even = np.array([]), np.array([])
+    else:
+        def savgol_deriv(ttable: Table, flux_key: str, deriv: int = 0):
+            """
+            Temporary function to get derivatives from savgol columns
+            """
+            key = '{0}_savgol_d{1}'.format(flux_key, deriv)
+            dd = np.array(ttable[key]) / (glw_c ** (deriv))
+            return dd
+        # get the derivative of the flux
+        dflux = savgol_deriv(template_table, 'flux', 1)
+        # get the 2nd derivative of the flux
+        d2flux = savgol_deriv(template_table, 'flux', 2)
+        # get the 3rd derivative of the flux
+        d3flux = savgol_deriv(template_table, 'flux', 3)
+        # get the derivative of the flux
+        dflux_odd = savgol_deriv(template_table, 'flux_odd', 1)
+        # get the 2nd derivative of the flux
+        d2flux_odd = savgol_deriv(template_table, 'flux_odd', 2)
+        # get the 3rd derivative of the flux
+        d3flux_odd = savgol_deriv(template_table, 'flux_odd', 3)
+        # get the derivative of the flux
+        dflux_even = savgol_deriv(template_table, 'flux_even', 1)
+        # get the 2nd derivative of the flux
+        d2flux_even = savgol_deriv(template_table, 'flux_even', 2)
+        # get the 3rd derivative of the flux
+        d3flux_even = savgol_deriv(template_table, 'flux_even', 3)
     # -------------------------------------------------------------------------
     # we create the spline of the template to be used everywhere later
     valid = np.isfinite(tflux) & np.isfinite(dflux)
@@ -558,7 +595,7 @@ def get_systemic_vel_props(inst: InstrumentsType, template_file: str,
         return props
     # get the object name
     sci_objname = inst.params['OBJECT_SCIENCE']
-    template_objname = inst.params['OBJECT_TEMPLATE']
+    template_objname = inst.params['OBJECT_COMPARISON']
     rv_min = inst.params['ROUGH_CCF_MIN_RV']
     rv_max = inst.params['ROUGH_CCF_MAX_RV']
     rv_step = inst.params['ROUGH_CCF_STEP_RV']
@@ -977,6 +1014,10 @@ def estimate_noise_model(spectrum: np.ndarray, wavegrid: np.ndarray,
     for order_num in range(spectrum.shape[0]):
         # get the wavelength for this order
         waveord = wavegrid[order_num]
+        # deal with all-nan waveord
+        if np.sum(np.isfinite(waveord)) < 5:
+            rms[order_num] = np.full(model.shape[1], fill_value=np.nan)
+            continue
         # calculate the number of points for the sliding error rms
         npoints = get_velo_scale(waveord, noise_sampling_width)
         # get the residuals between science and model
@@ -1253,6 +1294,7 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
     ratio = np.zeros_like(sci_data)
     # get the splines out of the spline dictionary
     if 'spline_odd' not in splines:
+        spline = splines['spline'], splines['spline']
         dspline = splines['dspline'], splines['dspline']
         d2spline = splines['d2spline'], splines['d2spline']
         d3spline = splines['d3spline'], splines['d3spline']
@@ -1437,6 +1479,15 @@ def compute_rv(inst: InstrumentsType, sci_iteration: int,
         wave2pixlist = []
         xpix = np.arange(model.shape[1])
         for order_num in range(wavegrid.shape[0]):
+            # deal with too few finite points in wavegrid
+            if np.sum(np.isfinite(nwavegrid[order_num])) < 5:
+                emsg = ('Order {0} has too few finite points (<5) in '
+                        'wavegrid to spline')
+                log.warning(emsg.format(order_num))
+                nspline = mp.NanSpline(emsg.format(order_num),
+                                       nwavegrid[order_num], xpix)
+                wave2pixlist.append(nspline)
+            # spline between wavelength and pixel position
             wave2pixlist.append(mp.iuv_spline(nwavegrid[order_num], xpix))
         # ---------------------------------------------------------------------
         # debug plot dictionary for plotting later
@@ -1865,7 +1916,7 @@ def get_velo_estimate(systemic_props: Dict[str, Any],
     # exptimes in days
     # if KW_EXPTIME is null this will raise a ValueError
     try:
-        expday = sci_table['KW_EXPTIME'] / 86400
+        expday = np.array(sci_table['KW_EXPTIME']).astype(float) / 86400
     except Exception as _:
         # warn user that KW_EXPTIME is not valid
         msg = ('KW_EXPTIME not valid - seeting velocity estimate to zero')
@@ -1874,7 +1925,7 @@ def get_velo_estimate(systemic_props: Dict[str, Any],
     # -------------------------------------------------------------------------
     # times used to match the systemic velocity
     # to the observation time
-    mid_times = sci_table['KW_MID_EXP_TIME']
+    mid_times = np.array(sci_table['KW_MID_EXP_TIME'].astype(float))
     mjd_table_low = mid_times - expday / 2.0
     mjd_table_high = mid_times + expday / 2.0
     valid = (mjd_table_low < mjdate) & (mjdate < mjd_table_high)
@@ -1918,11 +1969,103 @@ def smart_timing(durations: List[float], left: int) -> Tuple[float, float, str]:
     return mean_time, std_time, time_left
 
 
+def add_to_rv_headers(headers: Dict[str, List[Any]],
+                      comments: Dict[str, str],
+                      header: Any) -> Tuple[Dict[str, List[Any]], Dict[str, str]]:
+    """
+    Add to rv headers + comments (for merging later)
+
+    :param headers: dictionary of lists, all header keys for all files
+    :param comments: dictionary of strs, all comments for each header key
+    :param header: fits.Header, the header to add
+
+    :return: the updated headers and comments dictionaries
+    """
+    # loop around header keys
+    for key in header:
+        if key not in headers:
+            headers[key] = [header[key]]
+        else:
+            headers[key].append(header[key])
+        if key not in comments:
+            comments[key] = header.comments[key]
+
+    return headers, comments
+
+
+def combine_rv_headers(headers: Dict[str, List[Any]],
+                      comments: Dict[str, str]) -> Dict[str, Tuple[Any, str]]:
+    """
+    Combine rv headers into a single header
+
+    :param headers: dictionary of lists, all header keys for all files
+    :param comments: dictionary of strs, comments for each header key
+
+    :return: dictionary, combined header with (value, comment) tuples
+    """
+    # storage for combined headers
+    c_header = dict()
+    # loop around header keys
+    for key in headers:
+        # ---------------------------------------------------------------------
+        # get the values from the headers
+        values = headers[key]
+        comment = comments[key]
+        # ---------------------------------------------------------------------
+        if len(key) > 8 and key[:8] != 'HIERARCH':
+            key = 'HIERARCH ' + key
+        # ---------------------------------------------------------------------
+        # don't add this key if we have no values (shouldn't happen)
+        if len(values) == 0:
+            continue
+        # ---------------------------------------------------------------------
+        # check if all values are the same
+        all_same = all(x == values[0] for x in values)
+        # if all values are the same, this is easy, just use the first
+        if all_same:
+            # we have to avoid too long header keys
+            if len(key) + len(str(values[0])) > 75:
+                continue
+            c_header[key] = (values[0], comment)
+            # and continue
+            continue
+        # ---------------------------------------------------------------------
+        # otherwise, we need to combine depending on type
+        if all(isinstance(x, (int, float)) for x in values):
+            # numerical values - take mean and std
+            mean_val = np.nanmean(values)
+            std_val = np.nanstd(values)
+            num = len(values)
+            # deal with NaNs and infinite values
+            if not np.isfinite(mean_val):
+                mean_val = 'NaN'
+            if not np.isfinite(std_val):
+                std_val = 'NaN'
+            # we have to avoid too long header keys
+            if len(key) + len(str(mean_val)) > 75:
+                continue
+            if len(key) + len(str(std_val)) > 75:
+                continue
+
+            key1 = f'HIERARCH CAVG {key}'
+            key2 = f'HIERARCH CSTD {key}'
+            key3 = f'HIERARCH CNUM {key}'
+            c_header[key1] = (mean_val, comment)
+            c_header[key2] = (std_val, comment)
+            c_header[key3] = (num, comment)
+        # otherwise we are dealing with strings - just use the last
+        else:
+            c_header[key] = (values[-1], comment)
+    # -------------------------------------------------------------------------
+    # return the combined header
+    return c_header
+
 # =============================================================================
 # Define compil functions
 # =============================================================================
 def make_rdb_table(inst: InstrumentsType, rdbfile: str,
-                   lblrvfiles: np.ndarray, plot_dir: str) -> Dict[str, Any]:
+                   lblrvfiles: np.ndarray, plot_dir: str
+                   ) -> Tuple[Dict[str, Any], Dict[str, Tuple[Any, str]]]:
     """
     Make the primary rdb table (row per observation)
 
@@ -1974,6 +2117,8 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     # -------------------------------------------------------------------------
     # output rdb column set up
     # -------------------------------------------------------------------------
+    # storage for the header keys
+    rdb_headers, rdb_comments = dict(), dict()
     # storage for rdb table dictionary
     rdb_dict: Dict[str, Any] = dict()
     # add columns (dv, sdv, d2v, sd2v, d3v, sd3v, rjd, vrad, svrad)
@@ -2027,6 +2172,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     rdb_dict['FILENAME'] = [[]] * len(lblrvfiles)
     # add header keys
     for hdr_key in header_keys:
+        # ignore header keys that are None
+        if hdr_key is None:
+            continue
         # empty elements in a list for each key to fill
         rdb_dict[hdr_key] = [[]] * len(lblrvfiles)
     # add version
@@ -2115,6 +2263,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         rdb_dict['rjd'][row] = inst.get_rjd_value(rvhdr)
         # fill in plot date
         rdb_dict['plot_date'][row] = inst.get_plot_date(rvhdr)
+        # add keys to rdb_headers
+        rdb_headers, rdb_comments = add_to_rv_headers(rdb_headers, rdb_comments,
+                                                      rvhdr)
         # ---------------------------------------------------------------------
         # fill in filename
         # ---------------------------------------------------------------------
@@ -2125,6 +2276,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         # ---------------------------------------------------------------------
         # loop around header keys
         for ikey, key in enumerate(header_keys):
+            # ignore keys that are none
+            if key is None:
+                continue
             # make sure key is a string
             key = str(key)
             # deal with FP flags
@@ -2689,9 +2843,12 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     # ---------------------------------------------------------------------
     # add to output dictionary
     rdb_fitsdata['RDB'] = rdb_table
-
+    # ---------------------------------------------------------------------
+    # merge all rv headers into a single header
+    rdb_header = combine_rv_headers(rdb_headers, rdb_comments)
+    # ---------------------------------------------------------------------
     # return rdb table
-    return rdb_fitsdata
+    return rdb_fitsdata, rdb_header
 
 
 def make_rdb_table2(inst: InstrumentsType, rdb_table: Table) -> Table:
@@ -2764,6 +2921,15 @@ def make_rdb_table2(inst: InstrumentsType, rdb_table: Table) -> Table:
             # if not vrad or svrad then try to mean the column or if not
             #   just take the first value
             elif colname not in wmean_pairs.values():
+                # do not try to do a mean on strings (its stupid)
+                if isinstance(itable[colname][0], str):
+                    rdb_dict2[colname].append(itable[colname][0])
+                    continue
+                # deal with masked columns
+                if hasattr(itable[colname], 'mask'):
+                    if itable[colname].mask[0]:
+                        rdb_dict2[colname].append(np.nan)
+                        continue
                 # try to produce the mean of rdb table
                 # noinspection PyBroadException
                 try:
@@ -3216,23 +3382,29 @@ def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
     tqdm = base.tqdm_module(inst.params['USE_TQDM'], log.console_verbosity)
     # get the wave and flux vectors for the tempalte
     t_wave = np.array(template_table['wavelength'])
-    t_flux = np.array(template_table['flux'])
+
+    # -------------------------------------------------------------------------
+    if not inst.params['USE_SAVGOL_TEMPLATE']:
+        t_flux = np.array(template_table['flux'])
+        # smooth the spectrum to avoid lines that coincide with small-scale noise
+        #   excursion
+        t_flux_tmp = np.zeros_like(t_flux)
+        for offset in range(-2, 3):
+            t_flux_tmp += np.roll(t_flux, offset)
+        # copy over original vector
+        t_flux = np.array(t_flux_tmp)
+        # find the first and second derivative of the flux
+        dflux = np.gradient(t_flux)
+        ddflux = np.gradient(dflux)
+    else:
+        t_flux = np.array(template_table['flux_savgol_d0'])
+        dflux = np.array(template_table['flux_savgol_d1'])
+        ddflux = np.array(template_table['flux_savgol_d2'])
+    # -------------------------------------------------------------------------
     with warnings.catch_warnings(record=True) as _:
         t_snr = t_flux / template_table['rms']
         # remove infinite values
         t_snr[np.isinf(t_snr)] = np.nan
-    # -------------------------------------------------------------------------
-    # smooth the spectrum to avoid lines that coincide with small-scale noise
-    #   excursion
-    t_flux_tmp = np.zeros_like(t_flux)
-    for offset in range(-2, 3):
-        t_flux_tmp += np.roll(t_flux, offset)
-    # copy over original vector
-    t_flux = np.array(t_flux_tmp)
-    # -------------------------------------------------------------------------
-    # find the first and second derivative of the flux
-    dflux = np.gradient(t_flux)
-    ddflux = np.gradient(dflux)
     # -------------------------------------------------------------------------
     # lines are regions there is a sign change in the derivative of the flux
     #   we also have some checks for NaNs
@@ -3343,7 +3515,7 @@ def mask_systemic_velocity(inst: InstrumentsType, line_table: Table,
     sys_vel = -0.5 * fit_coeffs[1] / fit_coeffs[0]
     # display system velocity
     msg = 'System velocity for {0} is {1:.3f} km/s'
-    log.general(msg.format(inst.params['OBJECT_TEMPLATE'], sys_vel))
+    log.general(msg.format(inst.params['OBJECT_COMPARISON'], sys_vel))
     # -------------------------------------------------------------------------
     # ccf plot
     plot.mask_plot_ccf(inst, dvs, ccf, sys_vel)

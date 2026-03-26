@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-SPIRou instrument class here: instrument specific settings
+SOPHIE instrument class here: instrument specific settings
 
-Created on 2021-05-27
+Created on 2023-06-21
 
-@author: cook
+@author: p. larue
 """
 import glob
 import os
@@ -24,7 +24,7 @@ from lbl.instruments import default
 # =============================================================================
 # Define variables
 # =============================================================================
-__NAME__ = 'instruments.espresso.py'
+__NAME__ = 'instruments.expres.py'
 __version__ = base.__version__
 __date__ = base.__date__
 __authors__ = base.__authors__
@@ -37,20 +37,20 @@ log = io.log
 
 
 # =============================================================================
-# Define Spirou class
+# Define SOPHIE class
 # =============================================================================
-class Espresso(Instrument):
+class Expres(Instrument):
     def __init__(self, params: base_classes.ParamDict,
                  args: base_classes.ParamDict):
         # call to super function
-        super().__init__('ESPRESSO')
+        super().__init__('EXPRES')
         # extra parameters (specific to instrument)
-        self.default_template_name = 'LBL_Template_{0}_espresso.fits'
-        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_espresso.fits'
-        self.default_sample_wave_name = 'sample_wave_grid_espresso.fits'
+        self.default_template_name = 'LBL_Template_{0}_expres.fits'
+        self.default_mask_name = 'LBL_Mask_{obj}_{mtype}_expres.fits'
+        self.default_sample_wave_name = 'sample_wave_grid_expres.fits'
         # define wave limits in nm
-        self.wavemin = 377.189
-        self.wavemax = 790.788
+        self.wavemin = 379.66
+        self.wavemax = 822.36
         # set parameters for instrument
         self.params = params
         # override params
@@ -59,26 +59,26 @@ class Espresso(Instrument):
         self.update_from_args(args)
 
     # -------------------------------------------------------------------------
-    # INSTRUMENT SPECIFIC PARAMETERS
+    # SPIROU SPECIFIC PARAMETERS
     # -------------------------------------------------------------------------
     def param_override(self):
         """
-        Parameter override for SPIRou parameters
+        Parameter override for SOPHIE parameters
         (update default params)
 
         :return: None - updates self.params
         """
         # set function name
-        func_name = __NAME__ + '.Espresso.override()'
+        func_name = __NAME__ + '.Expres.override()'
         # set parameters to update
-        self.param_set('INSTRUMENT', 'ESPRESSO', source=func_name)
+        self.param_set('INSTRUMENT', 'EXPRES', source=func_name)
         # add instrument earth location
         #    (for use in astropy.coordinates.EarthLocation)
-        self.param_set('EARTH_LOCATION', 'Paranal')
+        self.param_set('EARTH_LOCATION', 'lowell')
         # define the default science input files
         self.param_set('INPUT_FILE', '*.fits', source=func_name)
         # The input science data are blaze corrected
-        self.param_set('BLAZE_CORRECTED', True, source=func_name)
+        self.param_set('BLAZE_CORRECTED', False, source=func_name)
         # define the mask table format
         self.param_set('REF_TABLE_FMT', 'csv', source=func_name)
         # define the mask type
@@ -87,53 +87,55 @@ class Espresso(Instrument):
         self.param_set('LFC_MASK_TYPE', 'neg', source=func_name)
         # define the default mask url and filename
         self.param_set('DEFAULT_MASK_FILE', source=func_name,
-                        value=None)
+                        value='mdwarf_harps.fits')
         # define the High pass width in km/s
-        self.param_set('HP_WIDTH', 256, source=func_name)
+        self.param_set('HP_WIDTH', 500, source=func_name)
         # approximate mean resolution in lambda/dlambda
-        self.param_set('APPROX_RESOLUTION', 140000, source=func_name)
+        self.param_set('APPROX_RESOLUTION', 150000, source=func_name)
         # define the SNR cut off threshold
-        # Question: Espresso value?
+        # Question: HARPS value?
         self.param_set('SNR_THRESHOLD', 10, source=func_name)
         # define which bands to use for the clean CCF (see astro.ccf_regions)
-        self.param_set('CCF_CLEAN_BANDS', ['r'],  source=func_name)
+        self.param_set('CCF_CLEAN_BANDS', ['r'], source=func_name)
         # define the plot order for the compute rv model plot
-        self.param_set('COMPUTE_MODEL_PLOT_ORDERS', [60], source=func_name)
+        self.param_set('COMPUTE_MODEL_PLOT_ORDERS', [50], source=func_name)
         # define the compil minimum wavelength allowed for lines [nm]
-        self.param_set('COMPIL_WAVE_MIN', 450, source=func_name)
+        self.param_set('COMPIL_WAVE_MIN', self.wavemin, source=func_name)
         # define the compil maximum wavelength allowed for lines [nm]
-        self.param_set('COMPIL_WAVE_MAX', 750, source=func_name)
+        self.param_set('COMPIL_WAVE_MAX', self.wavemax, source=func_name)
         # define the maximum pixel width allowed for lines [pixels]
         self.param_set('COMPIL_MAX_PIXEL_WIDTH', 50, source=func_name)
         # define min likelihood of correlation with BERV
         self.param_set('COMPIL_CUT_PEARSONR', -1, source=func_name)
         # define the CCF e-width to use for FP files
-        # Question: Espresso value?
-        self.param_set('COMPIL_FP_EWID', 3.0, source=func_name)
+        # Question: HARPS value?
+        self.param_set('COMPIL_FP_EWID', 5.0, source=func_name)
         # define whether to add the magic "binned wavelength" bands rv
         self.param_set('COMPIL_ADD_UNIFORM_WAVEBIN', True)
         # define the number of bins used in the magic "binned wavelength" bands
         self.param_set('COMPIL_NUM_UNIFORM_WAVEBIN', 15)
         # define the first band (from get_binned_parameters) to plot (band1)
-        self.param_set('COMPILE_BINNED_BAND1', 'g', source=func_name)
+        self.param_set('COMPILE_BINNED_BAND1', 'r', source=func_name)
         # define the second band (from get_binned_parameters) to plot (band2)
         #    this is used for colour   band2 - band3
-        self.param_set('COMPILE_BINNED_BAND2', 'r', source=func_name)
+        self.param_set('COMPILE_BINNED_BAND2', 'g', source=func_name)
         # define the third band (from get_binned_parameters) to plot (band3)
         #    this is used for colour   band2 - band3
-        self.param_set('COMPILE_BINNED_BAND3', 'i', source=func_name)
+        self.param_set('COMPILE_BINNED_BAND3', 'r', source=func_name)
         # define the reference wavelength used in the slope fitting in nm
-        self.param_set('COMPIL_SLOPE_REF_WAVE', 650, source=func_name)
+        self.param_set('COMPIL_SLOPE_REF_WAVE', 550, source=func_name)
         # define the name of the sample wave grid file (saved to the calib dir)
         self.param_set('SAMPLE_WAVE_GRID_FILE', self.default_sample_wave_name, 
                        source=func_name)
         # define the FP reference string that defines that an FP observation was
         #    a reference (calibration) file - should be a list of strings
         # Question: Check DRP TYPE for STAR,FP file
+        # TODO verify DPR TYPE in SOPHIE headers for FPs
         self.param_set('FP_REF_LIST', ['STAR,WAVE,FP'], source=func_name)
         # define the FP standard string that defines that an FP observation
         #    was NOT a reference file - should be a list of strings
         # Question: Check DRP TYPE for STAR,FP file
+        # TODO verify DPR TYPE in SOPHIE headers for STAR+FPs
         self.param_set('FP_STD_LIST', ['STAR,WAVE,FP'], source=func_name)
         # define readout noise per instrument (assumes ~5e- and 10 pixels)
         self.param_set('READ_OUT_NOISE', 15, source=func_name)
@@ -150,7 +152,7 @@ class Espresso(Instrument):
                               'HiResFITS/PHOENIX-ACES-AGSS-COND-2011/'
                               '{ZSTR}{ASTR}/')
         # Define the minimum allowed SNR in a pixel to add it to the mask
-        self.param_set('MASK_SNR_MIN', value=20, source=func_name)
+        self.param_set('MASK_SNR_MIN', value=5, source=func_name)
         # Define the stellar model file name (using wget, with appropriate
         #     format  cards)
         self.param_set('STELLAR_MODEL_FILE', source=func_name,
@@ -174,16 +176,16 @@ class Espresso(Instrument):
         # define the dv offset for tellu-cleaning in km/s
         self.param_set('TELLUCLEAN_DV0', value=0, source=func_name)
         # Define the lower wave limit for the absorber spectrum masks in nm
-        self.param_set('TELLUCLEAN_MASK_DOMAIN_LOWER', value=550,
+        self.param_set('TELLUCLEAN_MASK_DOMAIN_LOWER', value=500,
                         source=func_name)
         # Define the upper wave limit for the absorber spectrum masks in nm
-        self.param_set('TELLUCLEAN_MASK_DOMAIN_UPPER', value=670,
+        self.param_set('TELLUCLEAN_MASK_DOMAIN_UPPER', value=700,
                         source=func_name)
         # Define whether to force using airmass from header
-        self.param_set('TELLUCLEAN_FORCE_AIRMASS', value=True,
+        self.param_set('TELLUCLEAN_FORCE_AIRMASS', value=False,
                         source=func_name)
         # Define the CCF scan range in km/s
-        self.param_set('TELLUCLEAN_CCF_SCAN_RANGE', value=150,
+        self.param_set('TELLUCLEAN_CCF_SCAN_RANGE', value=50,
                         source=func_name)
         # Define the maximum number of iterations for the tellu-cleaning loop
         self.param_set('TELLUCLEAN_MAX_ITERATIONS', value=20, source=func_name)
@@ -207,13 +209,13 @@ class Espresso(Instrument):
         self.param_set('TELLUCLEAN_RECENTER_CCF', value=False,
                         source=func_name)
         # Define whether to recenter the CCF of others on the first iteration
-        self.param_set('TELLUCLEAN_RECENTER_CCF_FIT_OTHERS', value=True,
+        self.param_set('TELLUCLEAN_RECENTER_CCF_FIT_OTHERS', value=False,
                         source=func_name)
         # Define the default water absorption to use
-        self.param_set('TELLUCLEAN_DEFAULT_WATER_ABSO', value=5.0,
+        self.param_set('TELLUCLEAN_DEFAULT_WATER_ABSO', value=0.5,
                         source=func_name)
         # Define the lower limit on valid exponent of water absorbers
-        self.param_set('TELLUCLEAN_WATER_BOUNDS_LOWER', value=0.05,
+        self.param_set('TELLUCLEAN_WATER_BOUNDS_LOWER', value=0.01,
                         source=func_name)
         # Define the upper limit on valid exponent of water absorbers
         self.param_set('TELLUCLEAN_WATER_BOUNDS_UPPER', value=15,
@@ -233,69 +235,61 @@ class Espresso(Instrument):
         # maximum RMS between the template and the median of the template
         # to accept the median of the template as a good template. If above
         # we iterate once more. Expressed in m/s
-        self.param_set('MAX_CONVERGENCE_TEMPLATE_RV',100, source=func_name)
+        self.param_set('MAX_CONVERGENCE_TEMPLATE_RV', 100, source=func_name)
 
         # ---------------------------------------------------------------------
         # Header keywords
         # ---------------------------------------------------------------------
+        # define wave coeff key in header
+        self.param_set('KW_WAVECOEFFS', None, source=func_name)
+        # define wave num orders key in header
+        self.param_set('KW_WAVEORDN', None, source=func_name)
+        # define wave degree key in header
+        self.param_set('KW_WAVEDEGN', None, source=func_name)
         # define the key that gives the mid exposure time in MJD
-        self.param_set('KW_MID_EXP_TIME', 'HIERARCH ESO QC BJD',
-                        source=func_name)
+        self.param_set('KW_MID_EXP_TIME', 'TELMJD', source=func_name)
         # define the start time of the observation
-        self.param_set('KW_MJDATE', 'HIERARCH ESO QC BJD', source=func_name)
+        self.param_set('KW_MJDATE', 'TELMJD', source=func_name)
         # define snr keyword
-        self.param_set('KW_SNR', 'HIERARCH ESO QC ORDER100 SNR',
-                        source=func_name)
+        self.param_set('KW_SNR', None, source=func_name)
         # define berv keyword
-        self.param_set('KW_BERV', 'HIERARCH ESO QC BERV', source=func_name)
-        # # define the Blaze calibration file
-        self.param_set('KW_BLAZE_FILE', 'HIERARCH ESO PRO REC1 CAL20 NAME',
-                        source=func_name)
+        self.param_set('KW_BERV', None, source=func_name)
+        # define the Blaze calibration file
+        self.param_set('KW_BLAZE_FILE', None, source=func_name)
         # define the exposure time of the observation
-        self.param_set('KW_EXPTIME', 'HIERARCH ESO QC BJD',
-                        source=func_name)
+        self.param_set('KW_EXPTIME', 'AEXPTIME', source=func_name)
         # define the airmass of the observation
-        self.param_set('KW_AIRMASS',
-                        ['HIERARCH ESO TEL1 AIRM START',
-                         'HIERARCH ESO TEL2 AIRM START',
-                         'HIERARCH ESO TEL3 AIRM START',
-                         'HIERARCH ESO TEL4 AIRM START'],
-                        source=func_name)
+        self.param_set('KW_AIRMASS', 'AIRMASS', source=func_name)
         # define the human date of the observation
-        self.param_set('KW_DATE', 'DATE', source=func_name)
+        self.param_set('KW_DATE', 'MIDPOINT', source=func_name)
         # define the tau_h20 of the observation
         self.param_set('KW_TAU_H2O', 'TLPEH2O', source=func_name)
         # define the tau_other of the observation
         self.param_set('KW_TAU_OTHERS', 'TLPEOTR', source=func_name)
         # define the DPRTYPE of the observation
-        self.param_set('KW_DPRTYPE', 'HIERARCH ESO PRO REC1 RAW1 CATG',
-                        source=func_name)
+        self.param_set('KW_DPRTYPE', 'CAL-TYPE', source=func_name)
         # define the filename of the wave solution
-        self.param_set('KW_WAVEFILE', 'HIERARCH ESO PRO REC1 CAL15 NAME',
-                        source=func_name)
-        # define the original object name
-        self.param_set('KW_OBJNAME', 'HIERARCH ESO OBS TARG NAME',
-                        source=func_name)
+        self.param_set('KW_WAVEFILE', None, source=func_name)
+        # define the original object name (no name given just target code)
+        self.param_set('KW_OBJNAME', 'OBJECT', source=func_name)
         # define the SNR goal per pixel per frame (can not exist - will be
         #   set to zero)
-        # TODO -> no equivalent in ESPRESSO
-        self.param_set('KW_SNRGOAL', 'NONE', source=func_name)
+        self.param_set('KW_SNRGOAL', 'HIERARCH ESO OBS SN ', source=func_name)
         # define the SNR in chosen order
-        self.param_set('KW_EXT_SNR', 'HIERARCH ESO QC ORDER100 SNR',
-                        source=func_name)
+        self.param_set('KW_EXT_SNR', None, source=func_name)
         # define the barycentric julian date
-        self.param_set('KW_BJD', 'HIERARCH ESO QC BJD', source=func_name)
+        self.param_set('KW_BJD', 'MIDPOINT', source=func_name)
         # define the reference header key (must also be in rdb table) to
         #    distinguish FP calibration files from FP simultaneous files
-        self.param_set('KW_REF_KEY', 'HIERARCH ESO DPR TYPE', source=func_name)
+        self.param_set('KW_REF_KEY', None, source=func_name)
         # velocity of template from CCF
         self.param_set('KW_MODELVEL', 'MODELVEL', source=func_name)
         # the temperature of the object
-        # TODO: how do we get the temperature for ESPRESSO?
+        # TODO: how do we get the temperature for HARPS? / SOPHIE ?
         self.param_set('KW_TEMPERATURE', None, source=func_name)
 
     # -------------------------------------------------------------------------
-    # INSTRUMENT SPECIFIC METHODS
+    # SOPHIE SPECIFIC METHODS
     # -------------------------------------------------------------------------
     def load_header(self, filename: str, kind: str = 'fits file',
                     extnum: int = 0, extname: str = None) -> io.LBLHeader:
@@ -390,20 +384,9 @@ class Espresso(Instrument):
 
         :return: data (np.ndarray) or None
         """
-        # deal with already flagged as corrected
-        if self.params['BLAZE_CORRECTED']:
-            return None
-        # if we have a file defined use it
+        _ = self
         if filename is not None:
             blaze = io.load_fits(filename, kind='blaze fits file')
-            # load wave (we have to modify the blaze)
-            sci_wave = self.get_wave_solution(science_file)
-            # the blaze is not expressed as a flux density but the science
-            # spectrum is. We match the two
-            gradwave = np.gradient(sci_wave, axis=1)
-            for order_num in range(blaze.shape[0]):
-                gradwave[order_num] /= np.nanmedian(gradwave[order_num])
-            blaze = blaze * gradwave
             # deal with normalizing per order
             if normalize:
                 # get the blaze parameters (may be instrument specific)
@@ -411,11 +394,33 @@ class Espresso(Instrument):
                 # require the wave grid
                 wavegrid = self.get_wave_solution(science_file)
                 # normalizse the blaze
-                blaze = mp.smart_blaze_norm(wavegrid, blaze, nth_deg, bdomain)
+                blaze = mp.smart_blaze_norm(wavegrid, blaze, nth_deg,
+                                            bdomain)
             # return blaze
             return blaze
         else:
             return None
+
+    def load_science_file(self, science_file: str
+                          ) -> Tuple[np.ndarray, io.LBLHeader]:
+        """
+        Load a science exposure
+
+        Note data should be a 2D array (even if data is 1D)
+        Treat 1D data as a single order?
+
+        :param science_file: str, absolute path to filename
+
+        :return: tuple, data (np.ndarray) and header (io.LBLHeader)
+        """
+        # load the first extension of each
+        data_array = io.load_fits(science_file,
+                                  kind='science fits file',
+                                  extname='optimal')
+        sci_data = data_array['spectrum']
+        sci_hdr = self.load_header(science_file, kind='science fits file')
+        # return data and header
+        return sci_data, sci_hdr
 
     def get_mask_systemic_vel(self, mask_file: str) -> float:
         """
@@ -483,8 +488,8 @@ class Espresso(Instrument):
             # load header
             sci_hdr = self.load_header(science_file)
             # get mid exposure time
-            mid_exp_time = sci_hdr.get_hkey(self.params['KW_MID_EXP_TIME'],
-                                            science_file, dtype=float)
+            # noinspection PyTypeChecker
+            mid_exp_time = float(sci_hdr[self.params['KW_MID_EXP_TIME']])
             # get time
             times.append(mid_exp_time)
         # get sort mask
@@ -497,12 +502,13 @@ class Espresso(Instrument):
     def load_blaze_from_science(self, science_file: str,
                                 sci_image: np.ndarray,
                                 sci_hdr: io.LBLHeader,
-                                calib_directory: str, normalize: bool = True
+                                calib_directory: str,
+                                normalize: bool = True
                                 ) -> Tuple[np.ndarray, bool]:
         """
         Load the blaze file using a science file header
 
-        :param science_file: str, the absolute path to the science file
+        :param science_file: str, the science file
         :param sci_image: np.array - the science image (if we don't have a
                           blaze, we need this for the shape of the blaze)
         :param sci_hdr: io.LBLHeader - the science file header
@@ -517,36 +523,23 @@ class Espresso(Instrument):
         if self.params['BLAZE_CORRECTED']:
             # blaze corrected
             return np.ones_like(sci_image), True
-
         # get blaze file from science header
-        blaze_file = sci_hdr.get_hkey(self.params['KW_BLAZE_FILE'],
-                                      required=False)
-        # it may be that the blaze file is in a difference header key
-        #    in this case we need to find it
-        if blaze_file is None:
-            blaze_file = sci_hdr.find_hkey(self.params['KW_BLAZE_FILE_WILDF'],
-                                           self.params['KW_BLAZE_FILE_WILDM'],
-                                           self.params['KW_BLAZE_FILE_WILDV'])
+        blaze_file = sci_hdr.get_hkey(self.params['KW_BLAZE_FILE'])
         # construct absolute path
         abspath = os.path.join(calib_directory, blaze_file)
         # check that this file exists
         io.check_file_exists(abspath, 'blaze')
         # read blaze file (data and header)
         blaze = io.load_fits(abspath, kind='blaze fits file')
-        # load wave (we have to modify the blaze)
-        sci_wave = self.get_wave_solution(science_file)
-        # the blaze is not expressed as a flux density but the science spectrum
-        # is. We match the two
-        gradwave = np.gradient(sci_wave, axis=1)
-        for order_num in range(blaze.shape[0]):
-            gradwave[order_num] /= np.nanmedian(gradwave[order_num])
-        blaze = blaze * gradwave
         # deal with normalizing per order
         if normalize:
             # get the blaze parameters (may be instrument specific)
             nth_deg, bdomain = self.norm_blaze_params()
+            # require the wave grid
+            wavegrid = self.get_wave_solution(science_file, sci_image,
+                                              sci_hdr)
             # normalizse the blaze
-            blaze = mp.smart_blaze_norm(sci_wave, blaze, nth_deg, bdomain)
+            blaze = mp.smart_blaze_norm(wavegrid, blaze, nth_deg, bdomain)
         # return blaze
         return blaze, False
 
@@ -591,13 +584,8 @@ class Espresso(Instrument):
             #   phase as the sinc is squared. sin**2 has a period that is a
             #   factor of 2 shorter than the sin
             blaze[order_num] = (np.sin(phase) / phase) ** 2
-        # the blaze is not expressed as a flux density but the science
-        # spectrum is. We match the two
-        gradwave = np.gradient(sci_wave, axis=1)
-        for order_num in range(blaze.shape[0]):
-            gradwave[order_num] /= np.nanmedian(gradwave[order_num])
         # un-correct the science image
-        sci_image = (sci_image / gradwave) * blaze
+        sci_image = sci_image * blaze
         # return un-corrected science image and the calculated blaze
         return sci_image, blaze
 
@@ -606,7 +594,7 @@ class Espresso(Instrument):
                           header: Optional[io.LBLHeader] = None
                           ) -> np.ndarray:
         """
-        Get a wave solution from a file (for Espresso this is from the header)
+        Get a wave solution from a file (for HARPS this is from the header)
         :param science_filename: str, the absolute path to the file - for
                                  spirou this is a file with the wave solution
                                  in the header
@@ -617,18 +605,25 @@ class Espresso(Instrument):
 
         :return: np.ndarray, the wave map. Shape = (num orders x num pixels)
         """
-        # load wave map
-        wavemap = io.load_fits(science_filename, kind='wavemap', extnum=4)
         # ---------------------------------------------------------------------
-        # Espresso wave solution is in Angstrom - convert to nm for consistency
+        # get header
+        wavemap = io.load_fits(science_filename, 'wave fits file',
+                               extname='optimal')['bary_excalibur']
+        # ---------------------------------------------------------------------
+        # EXPRES wave solution is in Angstrom - convert to nm for consistency
         wavemap = wavemap / 10.0
+        # ---------------------------------------------------------------------
+        # TODO: check this
+        # # EXPRES wave solution is in air - convert to vacuum
+        # n_index = mp.air_index(wavemap)
+        # wavemap = wavemap * n_index
         # ---------------------------------------------------------------------
         # return wave solution map
         return wavemap
 
     def load_bad_hdr_keys(self) -> Tuple[list, Any]:
         """
-        Load the bad values and bad key for Espresso -- not used currently
+        Load the bad values and bad key for HARPS -- not used currently
 
         :return: tuple, 1. the list of bad values, 2. the bad key in
                  a file header to check against bad values
@@ -645,8 +640,15 @@ class Espresso(Instrument):
 
         :return:
         """
-        # ESPRESSO data is always BERV corrected from the starting point
-        berv = 0.0
+        # get BERV header key
+        hdr_key = self.params['KW_BERV']
+        # BERV depends on whether object is FP or not
+        if self.params['OBJECT_SCIENCE'] in ['FP', 'LFC', 'SUN']:
+            berv = 0.0
+        elif hdr_key is None:
+            berv = 0.0
+        else:
+            berv = sci_hdr.get_hkey(hdr_key, dtype=float) * 1000
         # return the berv measurement (in m/s)
         return berv
 
@@ -665,7 +667,7 @@ class Espresso(Instrument):
         """
         # these are defined in params
         drs_keys = ['KW_MJDATE', 'KW_MID_EXP_TIME', 'KW_EXPTIME',
-                    'KW_DATE', 'KW_DPRTYPE', 'KW_OBJNAME', 'KW_EXT_SNR']
+                    'KW_DATE', 'KW_DPRTYPE', 'KW_OBJNAME']
         # add the filename
         tdict = self.add_dict_list_value(tdict, 'FILENAME', filename)
         # loop around header keys
@@ -675,7 +677,7 @@ class Espresso(Instrument):
                 key = self.params[drs_key]
             else:
                 key = str(drs_key)
-
+            # get value from header
             value = sci_hdr.get(key, 'NULL')
             # add to tdict
             tdict = self.add_dict_list_value(tdict, drs_key, value)
@@ -692,10 +694,10 @@ class Espresso(Instrument):
         :return: tuple, 1. np.array of strings (the keys), 2. list of bools
                  the flags whether these keys should be used with FP files
         """
-        # these are defined in params
+        # there are defined in params
         drs_keys = ['KW_MJDATE', 'KW_MID_EXP_TIME', 'KW_EXPTIME',
                     'KW_AIRMASS', 'KW_DATE', 'KW_BERV', 'KW_DPRTYPE',
-                    'KW_TAU_H2O', 'KW_TAU_OTHERS' 'KW_NITERATIONS',
+                    'KW_TAU_H2O', 'KW_TAU_OTHERS', 'KW_NITERATIONS',
                     'KW_RESET_RV',
                     'KW_SYSTEMIC_VELO', 'KW_WAVEFILE', 'KW_OBJNAME',
                     'KW_EXT_SNR', 'KW_BJD', 'KW_CCF_EW']
@@ -710,13 +712,7 @@ class Espresso(Instrument):
                 continue
             # if key is in params we can add the value to keys
             if drs_key in self.params:
-                # need to deal with keys that define multiple drs keys
-                #   in this case use the original drs_key name
-                key = self.params[drs_key]
-                if isinstance(key, str):
-                    keys.append(key)
-                else:
-                    keys.append(drs_key)
+                keys.append(self.params[drs_key])
                 # we can also look for fp flag - this is either True or False
                 #    if True we skip this key for FP files - default is False
                 #    (i.e. not to skip)
@@ -769,15 +765,17 @@ class Espresso(Instrument):
         kw_bjd = self.params['KW_BJD']
         # get mjdmid and bjd
         mid_exp_time = header.get_hkey(kw_mjdmid, dtype=float)
-        bjd = header.get_hkey(kw_bjd, dtype=float)
-        if isinstance(bjd, str) or np.isnan(bjd):
-            # return RJD = MJD + 0.5
-            return float(mid_exp_time) + 0.5
-        else:
-            # convert bjd to mjd
-            bjd_mjd = Time(bjd, format='jd').mjd
-            # return RJD = MJD + 0.5
-            return float(bjd_mjd) + 0.5
+        bjd = header.get_hkey(kw_bjd, required=False)
+        if bjd is None or isinstance(bjd, str) or np.isnan(bjd):
+            try:
+                # return RJD = MJD + 0.5
+                return float(mid_exp_time) + 0.5
+            except Exception:
+                pass
+        # convert bjd to mjd
+        bjd_mjd = Time(bjd, format='jd').mjd
+        # return RJD = MJD + 0.5
+        return float(bjd_mjd) + 0.5
 
     def get_plot_date(self, header: io.LBLHeader):
         """
@@ -835,6 +833,82 @@ class Espresso(Instrument):
         # return this binning dictionary
         return binned
 
+    def write_tellu_cleaned(self, write_tellu_file: str, props: dict,
+                            sci_hdict: io.LBLHeader,
+                            science_filename: Optional[str] = None):
+        """
+        Write the write_tellu_file to disk
+
+        :param write_tellu_file: str, the file and path to write to
+        :param props: dictionnary output from the TELLUCLEANed code
+        :param sci_hdict: fits Header, an input file header to copy the header
+                          from to the new template file
+        :param science_filename: str, the science filename (not used for
+                                 default)
+        :return:
+        """
+        _ = science_filename
+        # convert hdict to header
+        sci_hdr = sci_hdict.to_fits()
+        # populate primary header
+        header = fits.Header()
+        # copy header from reference header
+        header = io.copy_header(header, sci_hdr)
+        # add custom keys
+        header = self.set_hkey(header, 'KW_VERSION', __version__)
+        header = self.set_hkey(header, 'KW_VDATE', __date__)
+        header = self.set_hkey(header, 'KW_PDATE', Time.now().iso)
+        header = self.set_hkey(header, 'KW_INSTRUMENT',
+                               self.params['INSTRUMENT'])
+        # set the LBL output data type
+        header = self.set_hkey(header, 'KW_OUTPUT', 'LBL_TELLU_CLEAN')
+        # set the LBL input object object name
+        header = self.set_hkey(header, 'KW_LBL_OBJNAME',
+                               self.params['OBJECT_SCIENCE'].strip())
+        # set the LBL input template object name
+        header = self.set_hkey(header, 'KW_LBL_TMPNAME',
+                               self.params['OBJECT_COMPARISON'].strip())
+        # add telluric key words
+        header = self.set_hkey(header, 'KW_TAU_H2O',
+                               props['pre_cleaned_exponent_water'])
+        header = self.set_hkey(header, 'KW_TAU_OTHERS',
+                               props['pre_cleaned_exponent_others'])
+        # set image as pre_cleaned_flux
+        image = props['pre_cleaned_flux']
+        # we need to get the data array from the fits file
+        data_array = io.load_fits(props['FILENAME'],
+                                  kind='science fits file',
+                                  extname='optimal')
+        # we push the image into the data arrays "spectrum" column
+        data_array['spectrum'] = image
+        # adding extensions that are not the flux after telluric correction
+        #   (error propagation, wavelength grid)
+        datalist = [None, data_array]
+        headerlist = [header, None]
+        datatypelist = [None, 'table']
+        # open hdulist
+        with fits.open(props['FILENAME']) as hdulist:
+            # add the header for extension 1
+            if len(hdulist) > 1:
+                headerlist[1] = hdulist[1].header
+            # loop around and add other extensions
+            for hdu in hdulist[2:]:
+                datalist.append(hdu.data)
+                headerlist.append(hdu.header)
+                if isinstance(hdu, fits.hdu.image.ImageHDU):
+                    datatypelist.append('image')
+                else:
+                    datatypelist.append('table')
+        # ---------------------------------------------------------------------
+        # change the file name
+        write_tellu_file = self.modify_tellu_filename(write_tellu_file)
+        # ---------------------------------------------------------------------
+        # Save template to disk
+        log.general('Saving tellu-cleaned file: {0}'.format(write_tellu_file))
+        # ---------------------------------------------------------------------
+        # write to file
+        io.write_fits(write_tellu_file, data=datalist,
+                      header=headerlist, dtype=datatypelist)
 
 # =============================================================================
 # Start of code

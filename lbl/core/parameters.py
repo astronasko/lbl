@@ -172,9 +172,9 @@ params.set(key='OBJECT_SCIENCE', value=None, source=__NAME__,
            desc='The object name for the compute function',
            arg='--obj_sci', dtype=str, not_none=True)
 
-# The object name to use for the template
-params.set(key='OBJECT_TEMPLATE', value=None, source=__NAME__,
-           desc='The object name to use for the template '
+# The object name to use for the comparison template
+params.set(key='OBJECT_COMPARISON', value=None, source=__NAME__,
+           desc='The object name to use for the comparison template '
                 '(If None set to OBJECT_SCIENCE)',
            arg='--obj_template', dtype=str)
 
@@ -207,13 +207,21 @@ params.set(key='BLAZE_FILE', value=None, source=__NAME__,
            desc='Blaze file to use (must be present in the CALIB directory)',
            arg='--blaze', dtype=str)
 
-# Template file to use (if not defined will try to find template for OBJECT)
-#   - can be None
-params.set(key='TEMPLATE_FILE', value=None, source=__NAME__,
-           desc='Template file to use (if not defined will try to find'
-                ' template for OBJECT_TEMPLATE) must be present in the'
+# Science template file to use (if not defined a template names is guessed).
+# If given must be present in the TEMPLATES directory
+params.set(key='SCIENCE_TEMPLATE_FILE', value=None, source=__NAME__,
+           desc='Science template file to use (if not defined a template '
+                'names is guessed). If given must be present in the '
                 'TEMPLATES directory',
-           arg='--template', dtype=str)
+           arg='--sci_template', dtype=str)
+
+# Comparison template file to use (if not defined a template names is guessed).
+# If given must be present in the TEMPLATES directory
+params.set(key='COMPARISON_TEMPLATE_FILE', value=None, source=__NAME__,
+           desc='Comparison template file to use (if not defined a template '
+                'names is guessed). If given must be present in the '
+                'TEMPLATES directory',
+           arg='--sci_template', dtype=str)
 
 # define the input files
 params.set(key='INPUT_FILE', value='*', source=__NAME__,
@@ -233,6 +241,15 @@ params.set(key='REF_TABLE_FMT', value='csv', source=__NAME__,
 # define the High pass width [km/s]
 params.set(key='HP_WIDTH', value=None, source=__NAME__,
            desc='The High pass width [km/s]', not_none=True)
+
+# approximate mean resolution in lambda/dlambda
+params.set(key='APPROX_RESOLUTION', value=None, source=__NAME__,
+              desc='The approximate mean resolution in lambda/dlambda',
+              not_none=True)
+
+# whether to generate and use savgol template
+params.set(key='USE_SAVGOL_TEMPLATE', value=True, source=__NAME__,
+           desc='Whether to generate and use savgol template')
 
 # define the SNR cut off threshold
 params.set(key='SNR_THRESHOLD', value=None, source=__NAME__,
@@ -597,7 +614,7 @@ params.set(key='TELLUCLEAN_USE_TEMPLATE', value=True, source=__NAME__,
 
 # define the default model repo url
 params.set(key='MODEL_REPO_URL',
-           value='https://www.astro.umontreal.ca/~artigau/lbl/models',
+           value='http://206.12.93.77/ari/data/lbl/models',
            source=__NAME__,
            desc='define the default model repo url', not_none=True)
 
@@ -853,6 +870,21 @@ params.set(key='KW_INSTRUMENT', value='LBLINSTR', source=__NAME__,
            desc='the LBL processed date',
            comment='LBL instrument used')
 
+# define the lbl mask type key for header (neg, pos, full)
+params.set(key='KW_MASK_TYPE', value='LBLMSKTP', source=__NAME__,
+           desc='the lbl mask type key for header (neg, pos, full)',
+           comment='LBL mask type (neg, pos, full)')
+
+# define the lbl object name key for header
+params.set(key='KW_LBL_OBJNAME', value='LBL_OBJN', source=__NAME__,
+           desc='the lbl object name key for header',
+           comment='LBL object name')
+
+# define the lbl template name key for header
+params.set(key='KW_LBL_TMPNAME', value='LBL_TMPN', source=__NAME__,
+           desc='the lbl template name key for header',
+           comment='LBL template object name')
+
 # define the start time of the observation key
 params.set(key='KW_MJDATE', value=None, source=__NAME__, not_none=False,
            desc='the start time of the observation')
@@ -882,8 +914,9 @@ params.set(key='KW_DPRTYPE', value=None, source=__NAME__, not_none=False,
            desc='the DPRTYPE of the observation')
 
 # define the output type of the file
-params.set(key='KW_OUTPUT', value=None, source=__NAME__, not_none=False,
-           desc='the output type of the file')
+params.set(key='KW_OUTPUT', value='DRSOUTID', source=__NAME__, not_none=False,
+           desc='the output type of the file',
+           comment='LBL file output type')
 
 # define the drs object name
 params.set(key='KW_DRSOBJN', value=None, source=__NAME__, not_none=False,
@@ -1028,6 +1061,11 @@ params.set(key='KW_LBLMASK', value='LBLMASK', source=__NAME__, not_none=False,
 params.set(key='KW_RAW_HASH', value='LBLRHASH', source=__NAME__,
            desc='The input science file hash',
            comment='The input science file hash')
+
+# Define the lbl template type
+params.set(key='KW_TEMPLATE_TYPE', value='LBLTMPLT', source=__NAME__,
+           not_none=False, desc='The lbl template type',
+           comment='The lbl template type')
 
 
 # =============================================================================

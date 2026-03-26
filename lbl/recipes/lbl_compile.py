@@ -39,7 +39,7 @@ ARGS_COMPIL = [  # core
     # directory
     'DATA_DIR', 'LBLRV_SUBDIR', 'LBLRDB_SUBDIR',
     # science
-    'OBJECT_SCIENCE', 'OBJECT_TEMPLATE',
+    'OBJECT_SCIENCE', 'OBJECT_COMPARISON',
     # plotting
     'PLOT', 'PLOT_COMPIL_CUMUL', 'PLOT_COMPIL_BINNED',
     # other
@@ -120,7 +120,7 @@ def __main__(inst: InstrumentsType, **kwargs):
     # -------------------------------------------------------------------------
     # Step 2: set filenames
     # -------------------------------------------------------------------------
-    # get all lblrv files for this object_science and object_template
+    # get all lblrv files for this object_science and object_comparison
     lblrv_files = inst.get_lblrv_files(lblrv_dir)
 
     # deal with no lblrv files (we cannot run compile)
@@ -129,7 +129,7 @@ def __main__(inst: InstrumentsType, **kwargs):
         wargs = [lblrv_dir]
         raise LblException(wmsg.format(*wargs))
 
-    # get rdb files for this object_science and object_template
+    # get rdb files for this object_science and object_comparison
     rdbfiles = inst.get_lblrdb_files(lbl_rdb_dir)
     rdbfile1, rdbfile2, rdbfile3, rdbfile4, drift_file = rdbfiles
 
@@ -146,7 +146,8 @@ def __main__(inst: InstrumentsType, **kwargs):
     # else we generate the rdb file
     else:
         # generate table using make_rdb_table function
-        rdb_data = general.make_rdb_table(inst, rdbfile1, lblrv_files, plot_dir)
+        rdb_data, rdb_header = general.make_rdb_table(inst, rdbfile1,
+                                                      lblrv_files, plot_dir)
         # get the rdb table out of rdb data
         rdb_table = rdb_data['RDB']
         # plot here based on table (not required when loading)
@@ -158,7 +159,7 @@ def __main__(inst: InstrumentsType, **kwargs):
         io.write_table(rdbfile1, rdb_table, fmt='rdb')
         # write fits file
         if inst.params['WRITE_RDB_FITS']:
-            inst.write_rdb_fits(rdbfile1, rdb_data)
+            inst.write_rdb_fits(rdbfile1, rdb_data, rdb_header)
         else:
             rdbfitsfile = rdbfile1.replace('.rdb', '.fits')
             log.general('Skipping {0}'.format(rdbfitsfile))
