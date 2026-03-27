@@ -990,7 +990,6 @@ def rot_broad(wvl: np.ndarray, flux: np.ndarray, epsilon: float, vsini: float,
     return result
 
 def blackbody_fractional_derivative(T, lambda_nm):
-    """TODO"""
     # Physical constants
     h = 6.62607015e-34  # J·s (Planck constant)
     c = 2.99792458e8    # m/s (speed of light)
