@@ -178,9 +178,9 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         ref_dict['LINE_SNR'] = np.array(table['LINE_SNR'])
         ref_dict['LINE_DEPTH'] = np.array(table['LINE_DEPTH'])
         ref_dict['LOCAL_FLUX'] = np.array(table['LOCAL_FLUX'])
-        ref_dict['ltr_metric'] = np.array(table['ltr_metric'])
-        ref_dict['ltr_weight'] = np.array(table['ltr_weight'])
-        ref_dict['ltr_bbfact'] = np.array(table['ltr_bbfact'])
+        ref_dict['RESPONSE_THETA'] = np.array(table['RESPONSE_THETA'])
+        ref_dict['RESPONSE_CORR'] = np.array(table['RESPONSE_CORR'])
+        ref_dict['RESPONSE_BETA'] = np.array(table['RESPONSE_BETA'])
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.array(table['RMSRATIO'])
         # effective number of pixels in line
@@ -207,7 +207,7 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
         # storage for vectors
         order, wave_start, wave_end, weight_line, xpix = [], [], [], [], []
         line_snr, line_depth, local_flux = [], [], []
-        ltr_metric, ltr_weight, ltr_bbfact = [], [], []
+        response_theta, response_corr, response_beta = [], [], []
         # loop around orders
         for order_num in range(wavegrid.shape[0]):
             # get the min max wavelengths for this order
@@ -241,9 +241,9 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
                 line_snr += list(mask_table['line_snr'][good][:-1])
                 line_depth += list(mask_table['depth'][good][:-1])
                 local_flux += list(mask_table['value'][good][:-1])
-                ltr_metric += list(mask_table['ltr_metric'][good][:-1])
-                ltr_weight += list(mask_table['ltr_weight'][good][:-1])
-                ltr_bbfact += list(mask_table['ltr_bbfact'][good][:-1])
+                response_theta += list(mask_table['response_theta'][good][:-1])
+                response_corr += list(mask_table['response_corr'][good][:-1])
+                response_beta += list(mask_table['response_beta'][good][:-1])
         # make xpix a numpy array
         xpix = np.array(xpix)
         # add to reference dictionary
@@ -256,9 +256,9 @@ def make_ref_dict(inst: InstrumentsType, reftable_file: str,
             ref_dict['LINE_SNR'] = np.array(line_snr)
         ref_dict['LINE_DEPTH'] = np.array(line_depth)
         ref_dict['LOCAL_FLUX'] = np.array(local_flux)
-        ref_dict['ltr_metric'] = np.array(ltr_metric)
-        ref_dict['ltr_weight'] = np.array(ltr_weight)
-        ref_dict['ltr_bbfact'] = np.array(ltr_bbfact)
+        ref_dict['RESPONSE_THETA'] = np.array(response_beta)
+        ref_dict['RESPONSE_CORR'] = np.array(response_corr)
+        ref_dict['RESPONSE_BETA'] = np.array(response_beta)
         # ratio of expected VS actual RMS in difference of model vs line
         ref_dict['RMSRATIO'] = np.zeros_like(xpix, dtype=float)
         # effective number of pixels in line
@@ -2215,9 +2215,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     d2v_arr, sd2v_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     d3v_arr, sd3v_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
     contrast_arr, scontrast_arr = np.zeros([nby, nbx]), np.zeros([nby, nbx])
-    ltr_metric_arr = np.zeros([nby, nbx])
-    ltr_weight_arr = np.zeros([nby, nbx])
-    ltr_bbfact_arr = np.zeros([nby, nbx])
+    response_theta_arr = np.zeros([nby, nbx])
+    response_corr_arr = np.zeros([nby, nbx])
+    response_beta_arr = np.zeros([nby, nbx])
 
     # projection model for the rdb_dict
     proj_model = dict()
@@ -2303,9 +2303,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         if not flag_calib:
             dv_arr[row] = rvtable[good]['dv']
             sdv_arr[row] = rvtable[good]['sdv']
-            ltr_metric_arr[row] = rvtable[good]['ltr_metric']
-            ltr_weight_arr[row] = rvtable[good]['ltr_weight']
-            ltr_bbfact_arr[row] = rvtable[good]['ltr_bbfact']
+            response_theta_arr[row] = rvtable[good]['response_theta']
+            response_corr_arr[row] = rvtable[good]['response_corr']
+            response_beta_arr[row] = rvtable[good]['response_beta']
         # else we calculate it using odd ratio mean
         else:
             cal_rv = np.array(rvtable[good]['dv'], dtype=float)
@@ -2674,11 +2674,11 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
             crx = scoeffs_crx[0]
             scrx = np.sqrt(scov_crx[0, 0])
             # work out LTR zeta and eta
-            (ltr_zeta, ltr_eta), (sltr_zeta, sltr_eta) = mp.odd_ratio_linfit(
-                x=ltr_metric_arr[row]+ltr_bbfact_arr[row],
+            (zeta, kappa), (sig_zeta, sig_kappa) = mp.odd_ratio_linfit(
+                x=response_theta_arr[row]+response_beta_arr[row],
                 y=dv_arr[row],
                 yerr=sdv_arr[row],
-                weights=ltr_weight_arr[row]
+                weights=response_corr_arr[row]
             )
             # see whether we need another iteration
             if np.abs(achromatic_velo - prev_velo) < 0.1 * sig_achromatic_velo:
@@ -2729,10 +2729,10 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         rdb_dict['CRX'][row] = crx
         rdb_dict['sCRX'][row] = scrx
         # TODO Neil please generalise to all DTEMPs
-        rdb_dict['ZETA0000'][row] = ltr_zeta
-        rdb_dict['sZETA0000'][row] = sltr_zeta
-        rdb_dict['ETA0000'][row] = ltr_eta
-        rdb_dict['sETA0000'][row] = sltr_eta
+        rdb_dict['ZETA0000'][row] = zeta
+        rdb_dict['sZETA0000'][row] = sig_zeta
+        rdb_dict['KAPPA0000'][row] = kappa
+        rdb_dict['sKAPPA0000'][row] = sig_kappa
         # ---------------------------------------------------------------------
         # Per-band per region RV measurements
         # ---------------------------------------------------------------------
@@ -3328,12 +3328,12 @@ def get_temp_response(
     # Get template flux and high-pass it
     template_flux  = np.array(template_table_vsys0['flux']) # TODO high-pass it
     # load the table
-    ltr_metric = np.full(
+    response_theta = np.full(
         shape=len(line_table),
         fill_value=np.nan
     )
-    ltr_weight = np.copy(ltr_metric)
-    ltr_bbfact = np.copy(ltr_metric)
+    response_corr = np.copy(response_theta)
+    response_beta = np.copy(response_theta)
     for i, line_table_row in enumerate(line_table):
         # I assume model- and template- tables share WAVE_START and WAVE_END,
         # but we can assert (asserts should have little overheads but Neil
@@ -3347,27 +3347,27 @@ def get_temp_response(
         mask &= (template_wav < line_end)
         if np.sum(mask)<10:
             continue
-        # 1. Compute thermal zeta
+        # 1. Compute response theta
         # Get the ordinary linear slope between flux and temp gradient (no err)
         x = template_flux[mask]
         x_mean = np.nanmean(x)
         y = template_dtemp[mask]
         y_mean = np.nanmean(y)
-        ltr_metric[i] = np.nansum(
+        response_theta[i] = np.nansum(
             (x-x_mean)*(y-y_mean)
         )
-        ltr_metric[i] /= np.nansum(
+        response_theta[i] /= np.nansum(
             (x-x_mean)**2
         )
-        ltr_weight[i] = np.square(
+        response_corr[i] = np.square(
             stats.pearsonr(x,y).statistic
         )
-        # 2. Compute black-body factor
-        ltr_bbfact[i] = mp.blackbody_fractional_derivative(teff, line_cen)
+        # 2. Compute response beta
+        response_beta[i] = mp.blackbody_fractional_derivative(teff, line_cen)
         
-    line_table['ltr_metric'] = ltr_metric
-    line_table['ltr_weight'] = ltr_weight
-    line_table['ltr_bbfact'] = ltr_bbfact
+    line_table['response_theta'] = response_theta
+    line_table['response_corr'] = response_corr
+    line_table['response_beta'] = response_beta
     return line_table
 
 def find_mask_lines(inst: InstrumentsType, template_table: Table) -> Table:
