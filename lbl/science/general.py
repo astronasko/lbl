@@ -2166,8 +2166,8 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
     # TODO Neil please generalise to all DTEMPs
     rdb_dict['ZETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
     rdb_dict['sZETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict['ETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
-    rdb_dict['sETA0000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['KAPPA0000'] = np.zeros_like(lblrvfiles, dtype=float)
+    rdb_dict['sKAPPA0000'] = np.zeros_like(lblrvfiles, dtype=float)
     # get filename column
     rdb_dict['FILENAME'] = [[]] * len(lblrvfiles)
     # add header keys
@@ -2303,9 +2303,9 @@ def make_rdb_table(inst: InstrumentsType, rdbfile: str,
         if not flag_calib:
             dv_arr[row] = rvtable[good]['dv']
             sdv_arr[row] = rvtable[good]['sdv']
-            response_theta_arr[row] = rvtable[good]['response_theta']
-            response_corr_arr[row] = rvtable[good]['response_corr']
-            response_beta_arr[row] = rvtable[good]['response_beta']
+            response_theta_arr[row] = rvtable[good]['RESPONSE_THETA']
+            response_corr_arr[row] = rvtable[good]['RESPONSE_CORR']
+            response_beta_arr[row] = rvtable[good]['RESPONSE_BETA']
         # else we calculate it using odd ratio mean
         else:
             cal_rv = np.array(rvtable[good]['dv'], dtype=float)
